@@ -30,8 +30,7 @@ function TopBar({ videosCount, onRefresh, isAdminAuthed, onLogoutAdmin }) {
           VS
         </span>
         <div>
-          <h1 className="text-lg font-semibold">MyStream Studio</h1>
-          <p className="text-xs text-slate-400">Supabase • Personal</p>
+          <h1 className="text-lg font-semibold">Stream Studio</h1>
         </div>
       </div>
 
