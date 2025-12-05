@@ -26,9 +26,6 @@ function TopBar({ videosCount, onRefresh, isAdminAuthed, onLogoutAdmin }) {
   return (
     <header className="border-b border-slate-800 bg-slate-950/80 p-3 flex justify-between items-center">
       <div className="flex items-center gap-3">
-        <span className="inline-flex h-8 w-8 items-center justify-center bg-emerald-400 text-black font-bold rounded-xl">
-          VS
-        </span>
         <div>
           <h1 className="text-lg font-semibold">Stream Studio</h1>
         </div>
