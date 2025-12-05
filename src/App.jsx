@@ -485,7 +485,7 @@ export default function App() {
      RENDER
   ------------------------------------------------------- */
   return (
-    <div className="min-h-screen w-screen bg-slate-950 text-slate-50 flex flex-col">
+    <div className="min-h-screen w-full bg-slate-950 text-slate-50 flex flex-col overflow-x-hidden">
       <TopBar
         videosCount={videos.length}
         onRefresh={loadVideos}

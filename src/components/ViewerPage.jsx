@@ -3,11 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import VideoPlayer from "./VideoPlayer";
 
 /*
- Improved ViewerPage:
- - Category buttons toggle (click again to clear)
- - Clear (×) button in search bar clears filters + hides player
- - Selecting a category hides player and opens Home
- - Defensive coding; safe defaults for props
+  ViewerPage — Option A (YouTube-style grid)
+  - grid-first
+  - player shows after thumbnail click
+  - prevents horizontal overflow
+  - respects bottom nav height (pb-24)
 */
 
 export default function ViewerPage(props) {
@@ -16,6 +16,7 @@ export default function ViewerPage(props) {
     selected,
     setSelected,
     loading = false,
+    fetchError = "",
     search,
     setSearch,
     filterType,
@@ -26,7 +27,7 @@ export default function ViewerPage(props) {
   const [showPlayer, setShowPlayer] = useState(false);
   const [activeTab, setActiveTab] = useState("home"); // home | categories | trending
 
-  // derive categories
+  // categories
   const categories = useMemo(() => {
     const s = new Set();
     (videos || []).forEach((v) => {
@@ -40,7 +41,7 @@ export default function ViewerPage(props) {
     return Array.from(s);
   }, [videos]);
 
-  // sorted lists
+  // sortings
   const recentVideos = useMemo(() => {
     return [...(videos || [])].sort(
       (a, b) => new Date(b.created_at) - new Date(a.created_at)
@@ -51,15 +52,13 @@ export default function ViewerPage(props) {
     return [...(videos || [])].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
   }, [videos]);
 
-  // thumbnail fallback
   const thumb = (v) =>
     v?.thumbnail_url || v?.public_url || v?.external_url || "https://placehold.co/600x350?text=No+Thumbnail";
 
-  // filtered list based on activeTab, search, filterType
+  // filtered list
   const filtered = useMemo(() => {
     const base = activeTab === "trending" ? trendingVideos : recentVideos;
     const q = (search || "").trim().toLowerCase();
-
     return base.filter((v) => {
       if (!v) return false;
       if (filterType && filterType !== "all" && v.source_type !== filterType) return false;
@@ -69,7 +68,7 @@ export default function ViewerPage(props) {
     });
   }, [search, filterType, recentVideos, trendingVideos, activeTab]);
 
-  // open player when clicking a thumbnail
+  // open player
   const openPlayer = (v) => {
     if (!v) return;
     setSelected(v);
@@ -77,43 +76,33 @@ export default function ViewerPage(props) {
     setActiveTab("home");
   };
 
-  // Home click hides player and clears active category search (but does not clear typed search)
+  // clicking Home hides player
   const onClickHome = () => {
     setActiveTab("home");
     setShowPlayer(false);
-    // optionally clear selection too:
     setSelected(null);
   };
 
-  // toggle category selection (click again to clear)
+  // category toggle
   const onToggleCategory = (cat) => {
     if (!cat) return;
-    const current = (search || "").trim();
-    if (current.toLowerCase() === cat.toLowerCase()) {
-      // toggle off
+    const cur = (search || "").trim();
+    if (cur.toLowerCase() === cat.toLowerCase()) {
       setSearch("");
       setFilterType("all");
-      setActiveTab("home");
       setShowPlayer(false);
       setSelected(null);
+      setActiveTab("home");
     } else {
       setSearch(cat);
       setFilterType("all");
-      setActiveTab("home");
       setShowPlayer(false);
       setSelected(null);
+      setActiveTab("home");
     }
   };
 
-  // clear search button
-  const clearSearch = () => {
-    setSearch("");
-    setFilterType("all");
-    setShowPlayer(false);
-    setSelected(null);
-  };
-
-  // if selected video got removed from the list, close player
+  // if selected removed, close player
   useEffect(() => {
     if (selected && !videos.some((v) => v && v.id === selected.id)) {
       setSelected(null);
@@ -123,8 +112,8 @@ export default function ViewerPage(props) {
   }, [videos]);
 
   return (
-    <main className="w-full min-h-screen bg-[#030712] text-white">
-      {/* desktop top nav */}
+    <main className="w-full min-h-screen bg-[#030712] text-white overflow-x-hidden">
+      {/* Desktop top nav */}
       <div className="hidden md:flex justify-center border-b border-white/10 bg-black/30 backdrop-blur-xl px-4 py-3">
         <div className="flex gap-6 text-sm">
           <button
@@ -150,9 +139,9 @@ export default function ViewerPage(props) {
         </div>
       </div>
 
-      {/* sticky search */}
+      {/* Sticky search + filter */}
       <div className="sticky top-0 z-40 bg-black/40 backdrop-blur-xl border-b border-white/10 p-4">
-        <div className="max-w-7xl mx-auto flex gap-3 items-center">
+        <div className="max-w-7xl w-full mx-auto flex gap-3 items-center">
           <input
             value={search || ""}
             onChange={(e) => setSearch(e.target.value)}
@@ -160,9 +149,8 @@ export default function ViewerPage(props) {
             className="flex-1 px-4 py-2 rounded-full bg-white/10 text-sm placeholder:text-gray-400 focus:outline-none"
           />
 
-          {/* clear button */}
           {(search || "").trim() !== "" && (
-            <button onClick={clearSearch} className="ml-2 px-3 py-2 rounded-md bg-white/6 text-sm">
+            <button onClick={() => { setSearch(""); setFilterType("all"); setShowPlayer(false); setSelected(null); }} className="ml-2 px-3 py-2 rounded-md bg-white/6 text-sm">
               ×
             </button>
           )}
@@ -176,14 +164,16 @@ export default function ViewerPage(props) {
             <option value="all">All</option>
             <option value="uploaded">Uploaded</option>
             <option value="external">External</option>
+            <option value="torrent">Torrent</option>
           </select>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-8">
-        {/* player area */}
+      {/* Main content container — w-full + pb-24 so bottom nav doesn't overlap */}
+      <div className="max-w-7xl w-full mx-auto px-4 py-6 pb-24">
+        {/* Player (only when shown) */}
         {activeTab === "home" && showPlayer && selected && (
-          <section className="rounded-2xl bg-white/5 border border-white/10 p-4 shadow-xl">
+          <section className="rounded-2xl bg-white/5 border border-white/10 p-4 shadow-xl mb-6">
             <div className="aspect-video rounded-xl overflow-hidden bg-black border border-white/10">
               <VideoPlayer video={selected} onPlayed={onVideoPlayed} />
             </div>
@@ -198,9 +188,9 @@ export default function ViewerPage(props) {
           </section>
         )}
 
-        {/* categories page */}
+        {/* Categories */}
         {activeTab === "categories" && (
-          <div>
+          <div className="mb-6">
             <h2 className="text-lg font-semibold mb-3">Categories</h2>
             <div className="flex flex-wrap gap-3">
               {categories.length === 0 && <p className="text-gray-400">No categories found.</p>}
@@ -220,7 +210,7 @@ export default function ViewerPage(props) {
           </div>
         )}
 
-        {/* grid for home & trending */}
+        {/* Grid list for home & trending */}
         {(activeTab === "home" || activeTab === "trending") && (
           <section>
             <h2 className="text-lg font-semibold mb-3">{activeTab === "trending" ? "Trending Now" : "Videos"}</h2>
@@ -233,20 +223,59 @@ export default function ViewerPage(props) {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filtered.map((v) => (
                   <button key={v.id} onClick={() => openPlayer(v)} className="text-left group">
-                    <div className="aspect-video rounded-xl overflow-hidden border border-white/10 bg-black">
-                      <img src={thumb(v)} alt={v?.title} className="w-full h-full object-cover group-hover:opacity-90 transition" />
+                    <div className="relative">
+                      <div className="aspect-video rounded-xl overflow-hidden border border-white/10 bg-black">
+                        <img
+                          src={thumb(v)}
+                          alt={v?.title || "thumbnail"}
+                          className="w-full h-full object-cover max-w-full"
+                        />
+                      </div>
+
+                      {v.source_type === "torrent" && (
+                        <div className="absolute left-2 top-2 inline-flex items-center gap-2 px-2 py-1 bg-yellow-800/90 rounded-full text-xs z-10">
+                          <span>🔗</span>
+                          <span>Torrent</span>
+                        </div>
+                      )}
                     </div>
+
                     <p className="mt-2 text-sm font-semibold truncate">{v?.title}</p>
                     <p className="text-xs text-gray-400">{(v?.view_count || 0).toLocaleString()} views</p>
+
+                    {/* quick actions for torrents (stopPropagation so we don't open player) */}
+                    <div className="mt-1 flex gap-2">
+                      {v.source_type === "torrent" && (
+                        <>
+                          <a
+                            onClick={(ev) => ev.stopPropagation()}
+                            href={v.external_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs px-2 py-1 bg-white/6 rounded"
+                          >
+                            Open
+                          </a>
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(v.external_url || ""); }}
+                            className="text-xs px-2 py-1 bg-white/6 rounded"
+                          >
+                            Copy
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </button>
                 ))}
               </div>
             )}
           </section>
         )}
+
+        {fetchError && <p className="text-rose-400 mt-3">{fetchError}</p>}
       </div>
 
-      {/* mobile bottom nav */}
+      {/* bottom nav (mobile) */}
       <div className="fixed bottom-0 left-0 w-full md:hidden bg-black/40 backdrop-blur-xl border-t border-white/10 py-2 flex justify-around text-sm">
         <button onClick={onClickHome} className={`flex flex-col items-center ${activeTab === "home" ? "text-emerald-400" : "text-gray-300"}`}>
           <span>🏠</span>
