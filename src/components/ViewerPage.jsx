@@ -3,11 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import VideoPlayer from "./VideoPlayer";
 
 /*
-  ViewerPage — Option A (YouTube-style grid)
-  - grid-first
-  - player shows after thumbnail click
-  - prevents horizontal overflow
-  - respects bottom nav height (pb-24)
+  ViewerPage — responsive viewer with:
+  - sticky search (min-w-0 input)
+  - categories, trending, home tabs
+  - grid thumbnails (click to open player)
+  - mobile bottom nav
 */
 
 export default function ViewerPage(props) {
@@ -43,17 +43,14 @@ export default function ViewerPage(props) {
 
   // sortings
   const recentVideos = useMemo(() => {
-    return [...(videos || [])].sort(
-      (a, b) => new Date(b.created_at) - new Date(a.created_at)
-    );
+    return [...(videos || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [videos]);
 
   const trendingVideos = useMemo(() => {
     return [...(videos || [])].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
   }, [videos]);
 
-  const thumb = (v) =>
-    v?.thumbnail_url || v?.public_url || v?.external_url || "https://placehold.co/600x350?text=No+Thumbnail";
+  const thumb = (v) => v?.thumbnail_url || v?.public_url || v?.external_url || "https://placehold.co/600x350?text=No+Thumbnail";
 
   // filtered list
   const filtered = useMemo(() => {
@@ -102,7 +99,6 @@ export default function ViewerPage(props) {
     }
   };
 
-  // if selected removed, close player
   useEffect(() => {
     if (selected && !videos.some((v) => v && v.id === selected.id)) {
       setSelected(null);
@@ -116,51 +112,30 @@ export default function ViewerPage(props) {
       {/* Desktop top nav */}
       <div className="hidden md:flex justify-center border-b border-white/10 bg-black/30 backdrop-blur-xl px-4 py-3">
         <div className="flex gap-6 text-sm">
-          <button
-            onClick={onClickHome}
-            className={`hover:text-emerald-400 ${activeTab === "home" ? "text-emerald-400 font-semibold" : ""}`}
-          >
-            Home
-          </button>
+          <button onClick={onClickHome} className={`hover:text-emerald-400 ${activeTab === "home" ? "text-emerald-400 font-semibold" : ""}`}>Home</button>
 
-          <button
-            onClick={() => { setActiveTab("categories"); setShowPlayer(false); setSelected(null); }}
-            className={`hover:text-blue-400 ${activeTab === "categories" ? "text-blue-400 font-semibold" : ""}`}
-          >
-            Categories
-          </button>
+          <button onClick={() => { setActiveTab("categories"); setShowPlayer(false); setSelected(null); }} className={`hover:text-blue-400 ${activeTab === "categories" ? "text-blue-400 font-semibold" : ""}`}>Categories</button>
 
-          <button
-            onClick={() => { setActiveTab("trending"); setShowPlayer(false); setSelected(null); }}
-            className={`hover:text-pink-400 ${activeTab === "trending" ? "text-pink-400 font-semibold" : ""}`}
-          >
-            Trending
-          </button>
+          <button onClick={() => { setActiveTab("trending"); setShowPlayer(false); setSelected(null); }} className={`hover:text-pink-400 ${activeTab === "trending" ? "text-pink-400 font-semibold" : ""}`}>Trending</button>
         </div>
       </div>
 
       {/* Sticky search + filter */}
-      <div className="sticky top-0 z-40 bg-black/40 backdrop-blur-xl border-b border-white/10 p-4">
-        <div className="max-w-7xl w-full mx-auto flex gap-3 items-center">
+      <div className="sticky top-0 z-40 bg-black/40 backdrop-blur-xl border-b border-white/10 px-3 py-3">
+        <div className="max-w-6xl w-full mx-auto flex items-center gap-3">
+          {/* input must be able to shrink on small screens -> min-w-0 */}
           <input
             value={search || ""}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search videos..."
-            className="flex-1 px-4 py-2 rounded-full bg-white/10 text-sm placeholder:text-gray-400 focus:outline-none"
+            className="flex-1 min-w-0 px-4 py-2 rounded-full bg-white/10 text-sm placeholder:text-gray-400 focus:outline-none"
           />
 
           {(search || "").trim() !== "" && (
-            <button onClick={() => { setSearch(""); setFilterType("all"); setShowPlayer(false); setSelected(null); }} className="ml-2 px-3 py-2 rounded-md bg-white/6 text-sm">
-              ×
-            </button>
+            <button onClick={() => { setSearch(""); setFilterType("all"); setShowPlayer(false); setSelected(null); }} className="ml-2 px-3 py-2 rounded-md bg-white/6 text-sm">×</button>
           )}
 
-          <select
-            value={filterType || "all"}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="ml-2 rounded-md bg-white/6 px-2 py-1 text-sm"
-            aria-label="Filter videos"
-          >
+          <select value={filterType || "all"} onChange={(e) => setFilterType(e.target.value)} className="ml-2 rounded-md bg-white/6 px-2 py-1 text-sm" aria-label="Filter videos">
             <option value="all">All</option>
             <option value="uploaded">Uploaded</option>
             <option value="external">External</option>
@@ -170,7 +145,7 @@ export default function ViewerPage(props) {
       </div>
 
       {/* Main content container — w-full + pb-24 so bottom nav doesn't overlap */}
-      <div className="max-w-7xl w-full mx-auto px-4 py-6 pb-24">
+      <div className="max-w-6xl w-full mx-auto px-4 py-6 pb-24">
         {/* Player (only when shown) */}
         {activeTab === "home" && showPlayer && selected && (
           <section className="rounded-2xl bg-white/5 border border-white/10 p-4 shadow-xl mb-6">
@@ -181,9 +156,7 @@ export default function ViewerPage(props) {
             <div className="mt-4">
               <h1 className="text-xl font-bold">{selected.title}</h1>
               {selected.description && <p className="text-gray-300 text-sm mt-1">{selected.description}</p>}
-              <p className="text-xs text-gray-500 mt-1">
-                {selected.category || "Uncategorized"} • {selected.view_count || 0} views
-              </p>
+              <p className="text-xs text-gray-500 mt-1">{selected.category || "Uncategorized"} • {selected.view_count || 0} views</p>
             </div>
           </section>
         )}
@@ -192,20 +165,20 @@ export default function ViewerPage(props) {
         {activeTab === "categories" && (
           <div className="mb-6">
             <h2 className="text-lg font-semibold mb-3">Categories</h2>
-            <div className="flex flex-wrap gap-3">
-              {categories.length === 0 && <p className="text-gray-400">No categories found.</p>}
-              {categories.map((c) => {
-                const active = ((search || "").trim().toLowerCase() === c.toLowerCase());
-                return (
-                  <button
-                    key={c}
-                    onClick={() => onToggleCategory(c)}
-                    className={`px-4 py-2 rounded-full text-sm ${active ? "bg-emerald-500 text-black" : "bg-white/10 text-gray-300"}`}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
+
+            {/* Centered inner container so categories are not left-aligned */}
+            <div className="max-w-3xl w-full mx-auto">
+              <div className="flex flex-wrap gap-3 justify-start md:justify-center">
+                {categories.length === 0 && <p className="text-gray-400">No categories found.</p>}
+                {categories.map((c) => {
+                  const active = ((search || "").trim().toLowerCase() === c.toLowerCase());
+                  return (
+                    <button key={c} onClick={() => onToggleCategory(c)} className={`px-4 py-2 rounded-full text-sm ${active ? "bg-emerald-500 text-black" : "bg-white/10 text-gray-300"}`}>
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -225,11 +198,7 @@ export default function ViewerPage(props) {
                   <button key={v.id} onClick={() => openPlayer(v)} className="text-left group">
                     <div className="relative">
                       <div className="aspect-video rounded-xl overflow-hidden border border-white/10 bg-black">
-                        <img
-                          src={thumb(v)}
-                          alt={v?.title || "thumbnail"}
-                          className="w-full h-full object-cover max-w-full"
-                        />
+                        <img src={thumb(v)} alt={v?.title || "thumbnail"} className="w-full h-full object-cover max-w-full" />
                       </div>
 
                       {v.source_type === "torrent" && (
@@ -247,21 +216,8 @@ export default function ViewerPage(props) {
                     <div className="mt-1 flex gap-2">
                       {v.source_type === "torrent" && (
                         <>
-                          <a
-                            onClick={(ev) => ev.stopPropagation()}
-                            href={v.external_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs px-2 py-1 bg-white/6 rounded"
-                          >
-                            Open
-                          </a>
-                          <button
-                            onClick={(ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(v.external_url || ""); }}
-                            className="text-xs px-2 py-1 bg-white/6 rounded"
-                          >
-                            Copy
-                          </button>
+                          <a onClick={(ev) => ev.stopPropagation()} href={v.external_url} target="_blank" rel="noreferrer" className="text-xs px-2 py-1 bg-white/6 rounded">Open</a>
+                          <button onClick={(ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(v.external_url || ""); }} className="text-xs px-2 py-1 bg-white/6 rounded">Copy</button>
                         </>
                       )}
                     </div>
