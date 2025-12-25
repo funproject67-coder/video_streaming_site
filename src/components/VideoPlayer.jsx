@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * VideoPlayer — Clean Cinematic Engine
  * Features: 
- * 1. Mobile-Optimized Responsive Icons
- * 2. Dual-Layer Colored Progress Bar
- * 3. Solid/Glowing Play Button
+ * 1. FIXED: Play Button Reliability (Direct Click Handler & Z-Index)
+ * 2. Mobile-Optimized Responsive Icons
+ * 3. Dual-Layer Colored Progress Bar
  * 4. Advanced Gestures
  */
 export default function VideoPlayer({ video, onPlayed }) {
@@ -163,7 +163,7 @@ export default function VideoPlayer({ video, onPlayed }) {
 
   // --- CONTROLS ---
   const togglePlay = useCallback(async (e) => {
-    e?.stopPropagation();
+    // e is optional here because we might call it programmatically
     const el = videoRef.current;
     if (!el) return;
     try { if (el.paused) await el.play(); else el.pause(); } catch (err) {}
@@ -254,7 +254,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         poster={thumbnail_url || undefined}
       />
 
-      {/* --- BUFFERING WHEEL (Responsive Size) --- */}
+      {/* --- BUFFERING WHEEL --- */}
       {isBuffering && (
         <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
             <div className="w-10 h-10 md:w-16 md:h-16 border-4 border-white/20 border-t-emerald-500 rounded-full animate-spin filter drop-shadow-lg"></div>
@@ -265,8 +265,8 @@ export default function VideoPlayer({ video, onPlayed }) {
       <div className={`absolute bottom-0 left-0 right-0 z-50 px-4 pb-4 pt-12 bg-gradient-to-t from-black/90 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="flex items-center gap-3 md:gap-4 text-xs md:text-sm font-bold text-white mb-1">
             
-            {/* Small Play Button (Bottom Bar) */}
-            <button onClick={togglePlay} className="hover:text-emerald-400 transition-colors p-1">
+            {/* Small Play Button */}
+            <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="hover:text-emerald-400 transition-colors p-1">
                 {isPlaying ? (
                     <svg className="w-5 h-5 md:w-7 md:h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
                 ) : (
@@ -278,19 +278,15 @@ export default function VideoPlayer({ video, onPlayed }) {
             
             {/* PROGRESS BAR */}
             <div className="flex-1 h-1 md:h-1.5 relative rounded-full cursor-pointer group">
-                {/* Background */}
                 <div className="absolute inset-0 bg-white/20 rounded-full"></div>
-                {/* Fill */}
                 <div 
                     className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
                     style={{ width: `${progress}%` }}
                 ></div>
-                {/* Thumb */}
                 <div 
                     className="absolute top-1/2 -translate-y-1/2 w-3 h-3 md:w-4 md:h-4 bg-white rounded-full shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
                 ></div>
-                {/* Input */}
                 <input 
                     type="range" min="0" max="100" value={progress} onChange={handleSeek}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
@@ -310,7 +306,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         </div>
       </div>
 
-      {/* --- GESTURE ZONES (Left) --- */}
+      {/* --- LEFT ZONE (Rewind) --- */}
       <div 
         className="absolute top-0 left-0 bottom-20 w-[30%] z-40 cursor-pointer touch-none"
         onMouseDown={() => handleInteractionStart('rewind')}
@@ -334,7 +330,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         )}
       </div>
 
-      {/* --- GESTURE ZONES (Right) --- */}
+      {/* --- RIGHT ZONE (Forward) --- */}
       <div 
         className="absolute top-0 right-0 bottom-20 w-[30%] z-40 cursor-pointer touch-none"
         onMouseDown={() => handleInteractionStart('forward')}
@@ -358,13 +354,19 @@ export default function VideoPlayer({ video, onPlayed }) {
         )}
       </div>
 
-      {/* --- CENTER PLAY/PAUSE BUTTON (Responsive) --- */}
+      {/* --- CENTER PLAY/PAUSE BUTTON (FIXED) --- */}
+      {/* Bumped z-index to 50 to sit above gesture zones if they overlap at the edges */}
       {!skippingMode && !isBuffering && (showControls || !isPlaying) && (
         <div 
-          onClick={togglePlay}
-          className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer pointer-events-none" 
+          className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none" 
         >
-          <div className="w-14 h-14 md:w-20 md:h-20 flex items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.6)] pointer-events-auto hover:scale-110 hover:bg-emerald-400 transition-all">
+          <div 
+            onClick={(e) => {
+                e.stopPropagation(); // Prevents "Toggle UI" from firing
+                togglePlay();
+            }}
+            className="w-14 h-14 md:w-20 md:h-20 flex items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.6)] cursor-pointer pointer-events-auto hover:scale-110 hover:bg-emerald-400 transition-all"
+          >
             {isPlaying ? (
                <svg className="w-6 h-6 md:w-8 md:h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
             ) : (
