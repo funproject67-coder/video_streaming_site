@@ -3,12 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * VideoPlayer — Clean Cinematic Engine
- * Optimized for Mobile & Desktop
  * Features: 
- * 1. Responsive Gesture Zones (Wider center safe-zone on mobile)
- * 2. Touch-Action locking for smooth holding
- * 3. Scaled UI for smaller screens
- * 4. Robust Fullscreen handling
+ * 1. Audio Enabled during Fast Forward (3x)
+ * 2. Native Progress Bar (Scrubber) Enabled
+ * 3. Double Tap to Seek +/- 10s
+ * 4. Auto-Rotate Orientation on Fullscreen
  */
 export default function VideoPlayer({ video, onPlayed }) {
   const [reported, setReported] = useState(false);
@@ -25,6 +24,7 @@ export default function VideoPlayer({ video, onPlayed }) {
   // --- GESTURE REFS ---
   const animationRef = useRef(null); 
   const wasPlayingRef = useRef(false); 
+  const wasMutedRef = useRef(false); 
   const holdTimerRef = useRef(null); 
   const lastTapTimeRef = useRef(0); 
   const isHoldingRef = useRef(false); 
@@ -47,32 +47,46 @@ export default function VideoPlayer({ video, onPlayed }) {
     setDoubleTapFeedback(null);
   }, [videoId]);
 
-  // --- FULLSCREEN LOGIC (Mobile Optimized) ---
+  // --- FULLSCREEN & ORIENTATION LOGIC ---
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
 
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        if (el.requestFullscreen) {
-            el.requestFullscreen();
-        } else if (el.webkitRequestFullscreen) { /* Safari */
-            el.webkitRequestFullscreen();
-        }
+        // ENTER FULLSCREEN
+        if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
     } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) { /* Safari */
-            document.webkitExitFullscreen();
-        }
+        // EXIT FULLSCREEN
+        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
     }
   }, []);
 
   useEffect(() => {
     const handleFsChange = () => {
-        setIsFullscreen(!!document.fullscreenElement || !!document.webkitFullscreenElement);
+        const isFs = !!document.fullscreenElement || !!document.webkitFullscreenElement;
+        setIsFullscreen(isFs);
+
+        // --- AUTO-ROTATE LOGIC ---
+        if (isFs) {
+            // Attempt to lock to landscape when entering fullscreen
+            if (window.screen?.orientation?.lock) {
+                window.screen.orientation.lock("landscape").catch((err) => {
+                    // Silently fail on unsupported devices (like desktop or some iOS)
+                    console.debug("Orientation lock not supported or denied", err);
+                });
+            }
+        } else {
+            // Unlock orientation when exiting
+            if (window.screen?.orientation?.unlock) {
+                window.screen.orientation.unlock();
+            }
+        }
     };
+
     document.addEventListener("fullscreenchange", handleFsChange);
-    document.addEventListener("webkitfullscreenchange", handleFsChange); // iOS/Safari
+    document.addEventListener("webkitfullscreenchange", handleFsChange);
     return () => {
         document.removeEventListener("fullscreenchange", handleFsChange);
         document.removeEventListener("webkitfullscreenchange", handleFsChange);
@@ -155,7 +169,7 @@ export default function VideoPlayer({ video, onPlayed }) {
   }, [handleKeyboardAction]);
 
   // ==========================================
-  //  GESTURE LOGIC
+  //  SMOOTH SKIP LOGIC
   // ==========================================
   
   const startHoldAction = (direction) => {
@@ -164,16 +178,22 @@ export default function VideoPlayer({ video, onPlayed }) {
 
     isHoldingRef.current = true;
     wasPlayingRef.current = !el.paused;
+    wasMutedRef.current = el.muted; 
+    
     setSkippingMode(direction);
 
     if (direction === 'forward') {
-        el.playbackRate = 4.0;
+        // FORWARD (Audio On)
+        el.playbackRate = 3.0; 
         if (el.paused) el.play();
     } else {
+        // REWIND (Muted)
+        el.muted = true;
         el.playbackRate = 1.0;
         el.pause();
+        
         const smoothRewind = () => {
-            el.currentTime = Math.max(0, el.currentTime - 0.08);
+            el.currentTime = Math.max(0, el.currentTime - 0.06);
             if (el.currentTime > 0) animationRef.current = requestAnimationFrame(smoothRewind);
         };
         animationRef.current = requestAnimationFrame(smoothRewind);
@@ -185,8 +205,10 @@ export default function VideoPlayer({ video, onPlayed }) {
     if (!el) return;
 
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    el.playbackRate = 1.0;
     
+    el.playbackRate = 1.0;
+    el.muted = wasMutedRef.current;
+
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
 
@@ -248,7 +270,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         poster={thumbnail_url || undefined}
       />
 
-      {/* --- CUSTOM FULLSCREEN TOGGLE (Responsive Position) --- */}
+      {/* --- CUSTOM FULLSCREEN TOGGLE --- */}
       <div 
         className="absolute top-3 right-3 sm:top-4 sm:right-4 z-50 p-2 rounded-full bg-black/40 backdrop-blur-md text-white/70 hover:text-white hover:bg-black/60 cursor-pointer transition-all border border-white/10 opacity-0 group-hover:opacity-100 touch-manipulation"
         onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
@@ -261,7 +283,6 @@ export default function VideoPlayer({ video, onPlayed }) {
       </div>
 
       {/* --- LEFT ZONE (Rewind) --- */}
-      {/* Width: 20% on mobile, 25% on desktop to prevent accidental skips */}
       <div 
         className="absolute top-0 left-0 bottom-14 sm:bottom-16 w-[20%] sm:w-[25%] z-40 cursor-pointer select-none touch-none"
         onMouseDown={() => handleInteractionStart('rewind')}
@@ -270,7 +291,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchStart={() => handleInteractionStart('rewind')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('rewind'); }}
       >
-        {/* Floating Feedback (Left) */}
+        {/* Clean Feedback (Left) */}
         <div className={`absolute inset-0 flex items-center justify-start pl-4 sm:pl-12 transition-opacity duration-300 ${skippingMode === 'rewind' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                 <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
@@ -298,13 +319,13 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchStart={() => handleInteractionStart('forward')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('forward'); }}
       >
-        {/* Floating Feedback (Right) */}
+        {/* Clean Feedback (Right) */}
         <div className={`absolute inset-0 flex items-center justify-end pr-4 sm:pr-12 transition-opacity duration-300 ${skippingMode === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                 <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="sm:w-10 sm:h-10"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
                 </div>
-                <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-black">4x Speed</span>
+                <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-black">3x Speed</span>
              </div>
         </div>
         {/* Tap Feedback */}
