@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * VideoPlayer — Clean Cinematic Engine
+ * Optimized for Mobile & Desktop
  * Features: 
- * 1. Native Progress Bar (Scrubber) Enabled
- * 2. Double Tap to Seek +/- 10s
- * 3. Smooth Hold to Fast Forward (4x) / Rewind
- * 4. Gesture-Preserving Fullscreen Mode
+ * 1. Responsive Gesture Zones (Wider center safe-zone on mobile)
+ * 2. Touch-Action locking for smooth holding
+ * 3. Scaled UI for smaller screens
+ * 4. Robust Fullscreen handling
  */
 export default function VideoPlayer({ video, onPlayed }) {
   const [reported, setReported] = useState(false);
@@ -46,26 +47,36 @@ export default function VideoPlayer({ video, onPlayed }) {
     setDoubleTapFeedback(null);
   }, [videoId]);
 
-  // --- FULLSCREEN LOGIC ---
-  // We use this custom toggle to ensure the CONTAINER goes fullscreen.
-  // This keeps our overlays (gestures) visible on top of the video.
+  // --- FULLSCREEN LOGIC (Mobile Optimized) ---
   const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-        containerRef.current?.requestFullscreen().catch(err => {
-            console.error(`Error attempting to enable fullscreen: ${err.message}`);
-        });
+    const el = containerRef.current;
+    if (!el) return;
+
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (el.requestFullscreen) {
+            el.requestFullscreen();
+        } else if (el.webkitRequestFullscreen) { /* Safari */
+            el.webkitRequestFullscreen();
+        }
     } else {
-        document.exitFullscreen();
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) { /* Safari */
+            document.webkitExitFullscreen();
+        }
     }
   }, []);
 
-  // Listen for fullscreen changes to update icon state
   useEffect(() => {
     const handleFsChange = () => {
-        setIsFullscreen(!!document.fullscreenElement);
+        setIsFullscreen(!!document.fullscreenElement || !!document.webkitFullscreenElement);
     };
     document.addEventListener("fullscreenchange", handleFsChange);
-    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange); // iOS/Safari
+    return () => {
+        document.removeEventListener("fullscreenchange", handleFsChange);
+        document.removeEventListener("webkitfullscreenchange", handleFsChange);
+    };
   }, []);
 
   // --- EVENTS ---
@@ -112,7 +123,6 @@ export default function VideoPlayer({ video, onPlayed }) {
   const handleKeyboardAction = useCallback((e) => {
     const el = videoRef.current;
     if (!el) return false;
-    // Don't trigger if typing in a box
     const active = document.activeElement;
     if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return false;
 
@@ -219,19 +229,17 @@ export default function VideoPlayer({ video, onPlayed }) {
   if (!video) return null;
 
   return (
-    // CONTAINER REF for Fullscreen
     <div 
         ref={containerRef}
         className="relative w-full aspect-video bg-black rounded-[2rem] overflow-hidden shadow-2xl group select-none outline-none fullscreen:rounded-none fullscreen:w-full fullscreen:h-full fullscreen:flex fullscreen:items-center fullscreen:justify-center"
     >
       
-      {/* Decorative Border (Hidden in Fullscreen) */}
+      {/* Decorative Border Overlay (Hidden in Fullscreen) */}
       {!isFullscreen && <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/10 pointer-events-none z-50" />}
 
       <video
         ref={videoRef}
         controls={true}
-        // controlsList="nofullscreen" attempts to hide the native button so users use ours
         controlsList="nofullscreen noremoteplayback" 
         playsInline 
         preload="metadata" 
@@ -240,25 +248,22 @@ export default function VideoPlayer({ video, onPlayed }) {
         poster={thumbnail_url || undefined}
       />
 
-      {/* --- CUSTOM FULLSCREEN TOGGLE (Top Right) --- */}
+      {/* --- CUSTOM FULLSCREEN TOGGLE (Responsive Position) --- */}
       <div 
-        className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/40 backdrop-blur-md text-white/70 hover:text-white hover:bg-black/60 cursor-pointer transition-all border border-white/10 opacity-0 group-hover:opacity-100"
-        onClick={(e) => {
-            e.stopPropagation();
-            toggleFullscreen();
-        }}
-        title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+        className="absolute top-3 right-3 sm:top-4 sm:right-4 z-50 p-2 rounded-full bg-black/40 backdrop-blur-md text-white/70 hover:text-white hover:bg-black/60 cursor-pointer transition-all border border-white/10 opacity-0 group-hover:opacity-100 touch-manipulation"
+        onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
       >
         {isFullscreen ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-5 sm:h-5"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
         ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-5 sm:h-5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
         )}
       </div>
 
       {/* --- LEFT ZONE (Rewind) --- */}
+      {/* Width: 20% on mobile, 25% on desktop to prevent accidental skips */}
       <div 
-        className="absolute top-0 left-0 bottom-16 w-[25%] z-40 cursor-pointer select-none touch-manipulation"
+        className="absolute top-0 left-0 bottom-14 sm:bottom-16 w-[20%] sm:w-[25%] z-40 cursor-pointer select-none touch-none"
         onMouseDown={() => handleInteractionStart('rewind')}
         onMouseUp={() => handleInteractionEnd('rewind')}
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
@@ -266,19 +271,19 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('rewind'); }}
       >
         {/* Floating Feedback (Left) */}
-        <div className={`absolute inset-0 flex items-center justify-start pl-12 transition-opacity duration-300 ${skippingMode === 'rewind' ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`absolute inset-0 flex items-center justify-start pl-4 sm:pl-12 transition-opacity duration-300 ${skippingMode === 'rewind' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
-                <div className="flex text-emerald-400 animate-pulse mb-2 scale-125">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
+                <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="sm:w-10 sm:h-10"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-white shadow-black">Rewinding</span>
+                <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-black">Rewinding</span>
              </div>
         </div>
         {/* Tap Feedback */}
         {doubleTapFeedback === 'rewind' && (
             <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
-                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20 shadow-2xl">
-                    <span className="text-xl font-black text-white drop-shadow-md">-10s</span>
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20 shadow-2xl">
+                    <span className="text-sm sm:text-xl font-black text-white drop-shadow-md">-10s</span>
                 </div>
             </div>
         )}
@@ -286,7 +291,7 @@ export default function VideoPlayer({ video, onPlayed }) {
 
       {/* --- RIGHT ZONE (Forward) --- */}
       <div 
-        className="absolute top-0 right-0 bottom-16 w-[25%] z-40 cursor-pointer select-none touch-manipulation"
+        className="absolute top-0 right-0 bottom-14 sm:bottom-16 w-[20%] sm:w-[25%] z-40 cursor-pointer select-none touch-none"
         onMouseDown={() => handleInteractionStart('forward')}
         onMouseUp={() => handleInteractionEnd('forward')}
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
@@ -294,19 +299,19 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('forward'); }}
       >
         {/* Floating Feedback (Right) */}
-        <div className={`absolute inset-0 flex items-center justify-end pr-12 transition-opacity duration-300 ${skippingMode === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`absolute inset-0 flex items-center justify-end pr-4 sm:pr-12 transition-opacity duration-300 ${skippingMode === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
-                <div className="flex text-emerald-400 animate-pulse mb-2 scale-125">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
+                <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="sm:w-10 sm:h-10"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-white shadow-black">4x Speed</span>
+                <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-black">4x Speed</span>
              </div>
         </div>
         {/* Tap Feedback */}
         {doubleTapFeedback === 'forward' && (
             <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
-                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20 shadow-2xl">
-                    <span className="text-xl font-black text-white drop-shadow-md">+10s</span>
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20 shadow-2xl">
+                    <span className="text-sm sm:text-xl font-black text-white drop-shadow-md">+10s</span>
                 </div>
             </div>
         )}
@@ -316,10 +321,10 @@ export default function VideoPlayer({ video, onPlayed }) {
       {!isPlaying && !skippingMode && (
         <div 
           onClick={togglePlay}
-          className="absolute top-0 left-[25%] right-[25%] bottom-16 z-30 flex items-center justify-center cursor-pointer bg-transparent"
+          className="absolute top-0 left-[20%] right-[20%] bottom-16 z-30 flex items-center justify-center cursor-pointer bg-transparent"
         >
-          <div className="w-14 h-14 flex items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_0_40px_rgba(16,185,129,0.5)] transform transition-transform duration-300 hover:scale-110 active:scale-95 hover:bg-emerald-400">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="ml-1">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_0_40px_rgba(16,185,129,0.5)] transform transition-transform duration-300 hover:scale-110 active:scale-95 hover:bg-emerald-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="ml-1 sm:w-6 sm:h-6">
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>
