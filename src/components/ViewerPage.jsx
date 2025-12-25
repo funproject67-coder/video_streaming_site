@@ -87,8 +87,7 @@ export default function ViewerPage(props) {
   }, [search, activeTab, videos, trendingVideos, categoryFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (page > totalPages) setPage(1); }, [filtered.length, page, totalPages]);
+  useEffect(() => { if (page > totalPages) setPage(1); }, [filtered.length, totalPages]);
   const paged = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
 
   // === Handlers ===
@@ -116,10 +115,8 @@ export default function ViewerPage(props) {
     setPage(1); // Reset page on category change
   };
 
-  // --- NEW: Handle Page Change with Scroll ---
   const handlePageChange = (newPage) => {
     setPage(newPage);
-    // Smooth scroll to the top of the list container
     listTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -173,18 +170,25 @@ export default function ViewerPage(props) {
                 <div className="rounded-[2.5rem] overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] bg-black ring-1 ring-white/10">
                   <VideoPlayer video={selected} onPlayed={(id) => onVideoPlayed?.(id)} />
                 </div>
-                <div className="mt-8 px-4">
-                  <div className="flex gap-2 mb-4">
-                    <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">{selected.category || "General"}</span>
-                    {selected.duration && <span className="px-3 py-1 rounded-full bg-white/5 text-slate-400 text-[10px] font-medium border border-white/5">⏱️ {formatDuration(selected.duration)}</span>}
+                <div className="mt-6 px-4">
+                  {/* Reduced gap and margin */}
+                  <div className="flex gap-2 mb-3">
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[9px] font-bold border border-emerald-500/20 uppercase tracking-wider">{selected.category || "General"}</span>
+                    {selected.duration && <span className="px-2.5 py-0.5 rounded-full bg-white/5 text-slate-400 text-[9px] font-medium border border-white/5 uppercase tracking-wider">⏱️ {formatDuration(selected.duration)}</span>}
                   </div>
-                  <h1 className="text-3xl md:text-4xl font-black text-white mb-4 tracking-tight">{selected.title}</h1>
-                  <div className="flex items-center gap-3 text-slate-400 font-bold text-sm uppercase tracking-tighter mb-6">
-                    <span className="text-emerald-400">👁️ {Number(selected.view_count || 0).toLocaleString()} views</span>
+                  
+                  {/* REDUCED TITLE SIZE (text-xl md:text-2xl) */}
+                  <h1 className="text-xl md:text-2xl font-black text-white mb-2 tracking-tight leading-snug">{selected.title}</h1>
+                  
+                  {/* REDUCED METADATA SIZE (text-[10px]) */}
+                  <div className="flex items-center gap-3 text-slate-500 font-bold text-[10px] uppercase tracking-widest mb-4">
+                    <span className="text-emerald-500/80">👁️ {Number(selected.view_count || 0).toLocaleString()} views</span>
                     <span className="text-slate-800">|</span>
                     <span>{new Date(selected.created_at).toLocaleDateString()}</span>
                   </div>
-                  <p className="text-slate-400 leading-relaxed text-sm md:text-base border-l-2 border-emerald-500/30 pl-6 whitespace-pre-line">{selected.description}</p>
+                  
+                  {/* REDUCED DESCRIPTION SIZE (text-xs md:text-sm) */}
+                  <p className="text-slate-400 leading-relaxed text-xs md:text-sm border-l-2 border-emerald-500/30 pl-4 whitespace-pre-line max-w-4xl">{selected.description}</p>
                 </div>
               </div>
             </motion.section>
@@ -267,7 +271,7 @@ export default function ViewerPage(props) {
                     {[...Array(totalPages)].map((_, i) => (
                       <button 
                         key={i} 
-                        onClick={() => handlePageChange(i + 1)} // Updated Handler
+                        onClick={() => handlePageChange(i + 1)} 
                         className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${page === i + 1 ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:bg-white/5"}`}
                       >
                         {i + 1}
