@@ -3,15 +3,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import VideoPlayer from "./VideoPlayer";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
-// --- OPTIMIZED SKELETON LOADER ---
-// Matches the exact rounded corners and spacing of the real cards
+// --- SKELETON LOADER (Matches Card Design) ---
 const VideoGridSkeleton = () => (
   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
     {[...Array(8)].map((_, i) => (
       <div key={i} className="flex flex-col gap-3">
-        {/* Thumbnail Skeleton */}
         <div className="aspect-video bg-white/5 rounded-2xl md:rounded-[2rem] animate-pulse ring-1 ring-white/5" />
-        {/* Text Skeletons */}
         <div className="space-y-2 px-2">
           <div className="h-4 bg-white/5 rounded-md w-3/4 animate-pulse" />
           <div className="h-3 bg-white/5 rounded-md w-1/2 animate-pulse" />
@@ -49,7 +46,7 @@ export default function ViewerPage(props) {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 12;
 
-  // === Data Processing & Stats ===
+  // === Data Processing ===
   const { categoryCounts, trendingVideos, maxViewCount } = useMemo(() => {
     const catMap = new Map();
     const trendingBase = [];
@@ -71,7 +68,7 @@ export default function ViewerPage(props) {
     };
   }, [videos]);
 
-  // === Filtering Logic ===
+  // === Filtering ===
   const filtered = useMemo(() => {
     let base = activeTab === "trending" ? trendingVideos : 
                activeTab === "featured" ? videos.filter(v => v?.is_featured) :
@@ -93,7 +90,7 @@ export default function ViewerPage(props) {
   useEffect(() => { if (page > totalPages) setPage(1); }, [filtered.length, totalPages]);
   const paged = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page]);
 
-  // === Handlers ===
+  // === Interactions ===
   const openPlayer = (v) => {
     setSelected(v);
     setShowPlayer(true);
@@ -128,13 +125,13 @@ export default function ViewerPage(props) {
   return (
     <main className="w-full min-h-screen bg-[#020617] text-slate-100 relative isolate font-sans selection:bg-emerald-500/30">
       
-      {/* Background Mesh Decor */}
+      {/* Background Ambience */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-600/10 blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]" />
       </div>
 
-      {/* Desktop Navigation */}
+      {/* Desktop Nav */}
       <nav className="hidden md:block sticky top-0 z-50 bg-slate-950/60 backdrop-blur-xl border-b border-white/5 transition-all duration-300">
         <div className="max-w-7xl mx-auto flex justify-center h-16 items-center px-6">
           <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
@@ -148,7 +145,7 @@ export default function ViewerPage(props) {
         </div>
       </nav>
 
-      {/* Search Bar */}
+      {/* Search */}
       <div className="sticky top-0 md:top-16 z-40 px-4 py-4 backdrop-blur-sm transition-all">
         <div className="max-w-4xl mx-auto flex items-center p-2 rounded-2xl bg-slate-900/80 border border-white/10 shadow-2xl focus-within:ring-2 focus-within:ring-emerald-500/50 transition-all">
           <div className="flex-1 flex items-center px-3 gap-3">
@@ -165,11 +162,21 @@ export default function ViewerPage(props) {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-32">
-        {/* Player Section */}
+        {/* PLAYER SECTION */}
         <AnimatePresence mode="wait">
           {showPlayer && selected && (
-            <motion.section ref={playerRef} key={`player-${selected.id}`} initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="mb-16 scroll-mt-24">
+            <motion.section 
+                ref={playerRef} 
+                key={`player-${selected.id}`} 
+                initial={{ opacity: 0, y: -20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, scale: 0.95 }} 
+                className="mb-16 scroll-mt-24"
+            >
               <div className="max-w-5xl mx-auto">
+                {/* FIX: No wrapper styling here. 
+                    VideoPlayer handles its own rounded corners and shadows.
+                */}
                 <div className="mb-2">
                   <VideoPlayer video={selected} onPlayed={(id) => onVideoPlayed?.(id)} />
                 </div>
@@ -204,7 +211,7 @@ export default function ViewerPage(props) {
           <p className="text-slate-500 text-xs md:text-sm mt-1 font-medium ml-1">{filtered.length} total videos</p>
         </div>
 
-        {/* Grid/List Content */}
+        {/* Grid Content */}
         <AnimatePresence mode="wait">
           {activeTab === "categories" && !categoryFilter ? (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
@@ -247,7 +254,6 @@ export default function ViewerPage(props) {
                                 <div className={`relative aspect-video rounded-2xl md:rounded-[2rem] overflow-hidden bg-slate-900 mb-4 ring-1 transition-all duration-500 shadow-xl shadow-black/40 ${isPlaying ? "ring-emerald-500 ring-offset-2 ring-offset-[#020617]" : "ring-white/10 group-hover:ring-emerald-500/50"}`}>
                                     <img src={v.thumbnail_url || "https://placehold.co/600x400/020617/white?text=Preview"} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="" />
                                     
-                                    {/* Desktop Hover Play Button */}
                                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                         <div className="w-10 h-10 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow-2xl scale-75 group-hover:scale-100 transition-transform">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
@@ -302,9 +308,7 @@ export default function ViewerPage(props) {
           {["home", "latest", "categories", "trending"].map(id => (
             <button key={id} onClick={() => onSelectTab(id)} className={`flex-1 py-3 rounded-xl relative ${activeTab === id ? "text-emerald-400" : "text-slate-500"}`}>
               {activeTab === id && <motion.div layoutId="mobileNav" className="absolute inset-0 bg-white/5 rounded-xl" />}
-              <span className="relative z-10 text-xl block text-center">
-                {id === "home" ? "🏠" : id === "latest" ? "⚡" : id === "categories" ? "📂" : "🔥"}
-              </span>
+              <span className="relative z-10 text-xl block text-center">{id === "home" ? "🏠" : id === "latest" ? "⚡" : id === "categories" ? "📂" : "🔥"}</span>
             </button>
           ))}
         </div>
