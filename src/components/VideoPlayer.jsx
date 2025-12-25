@@ -4,24 +4,31 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * VideoPlayer — Clean Cinematic Engine
  * Features: 
- * 1. Fixed Fullscreen Zoom (Switches to object-contain)
- * 2. Lag-Free Audio Resync
- * 3. Native Progress Bar Enabled
- * 4. Double Tap & Smooth Hold Gestures
+ * 1. Mobile-Optimized Responsive Icons
+ * 2. Dual-Layer Colored Progress Bar
+ * 3. Solid/Glowing Play Button
+ * 4. Advanced Gestures
  */
 export default function VideoPlayer({ video, onPlayed }) {
   const [reported, setReported] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   
+  // --- VIDEO STATE ---
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
   // --- GESTURE STATE ---
   const [skippingMode, setSkippingMode] = useState(null); 
   const [doubleTapFeedback, setDoubleTapFeedback] = useState(null);
 
   const videoRef = useRef(null);
   const containerRef = useRef(null);
+  const controlsTimeoutRef = useRef(null);
   
-  // --- GESTURE REFS ---
   const animationRef = useRef(null); 
   const wasPlayingRef = useRef(false); 
   const wasMutedRef = useRef(false); 
@@ -29,29 +36,46 @@ export default function VideoPlayer({ video, onPlayed }) {
   const lastTapTimeRef = useRef(0); 
   const isHoldingRef = useRef(false); 
 
-  const {
-    id: videoId,
-    source_type,
-    public_url,
-    file_url,
-    external_url,
-    thumbnail_url,
-  } = video || {};
-
+  const { id: videoId, source_type, public_url, file_url, external_url, thumbnail_url } = video || {};
   const src = source_type === "uploaded" ? public_url || file_url || "" : external_url || "";
 
   useEffect(() => {
     setReported(false);
     setIsPlaying(false);
+    setIsBuffering(true); 
     setSkippingMode(null);
     setDoubleTapFeedback(null);
+    setProgress(0);
   }, [videoId]);
 
-  // --- FULLSCREEN & ORIENTATION LOGIC ---
+  // --- UI VISIBILITY ---
+  const showUI = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    if (isPlaying && !skippingMode) {
+        controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
+    }
+  }, [isPlaying, skippingMode]);
+
+  const toggleUI = useCallback((e) => {
+    e?.stopPropagation();
+    if (showControls && isPlaying) setShowControls(false);
+    else showUI();
+  }, [showControls, isPlaying, showUI]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+        setShowControls(true);
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    } else {
+        showUI();
+    }
+  }, [isPlaying, showUI]);
+
+  // --- FULLSCREEN ---
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
         if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
         else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
@@ -65,15 +89,8 @@ export default function VideoPlayer({ video, onPlayed }) {
     const handleFsChange = () => {
         const isFs = !!document.fullscreenElement || !!document.webkitFullscreenElement;
         setIsFullscreen(isFs);
-        if (isFs) {
-            if (window.screen?.orientation?.lock) {
-                window.screen.orientation.lock("landscape").catch(() => {});
-            }
-        } else {
-            if (window.screen?.orientation?.unlock) {
-                window.screen.orientation.unlock();
-            }
-        }
+        if (isFs && window.screen?.orientation?.lock) window.screen.orientation.lock("landscape").catch(() => {});
+        else if (!isFs && window.screen?.orientation?.unlock) window.screen.orientation.unlock();
     };
     document.addEventListener("fullscreenchange", handleFsChange);
     document.addEventListener("webkitfullscreenchange", handleFsChange);
@@ -84,99 +101,89 @@ export default function VideoPlayer({ video, onPlayed }) {
   }, []);
 
   // --- EVENTS ---
+  const handleTimeUpdate = () => {
+    const el = videoRef.current;
+    if (el) {
+        setCurrentTime(el.currentTime);
+        setProgress((el.currentTime / el.duration) * 100 || 0);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) setDuration(videoRef.current.duration);
+  };
+
+  const handleSeek = (e) => {
+    e.stopPropagation();
+    const el = videoRef.current;
+    if (el) {
+        const newTime = (Number(e.target.value) / 100) * el.duration;
+        el.currentTime = newTime;
+        setProgress(Number(e.target.value));
+        showUI();
+    }
+  };
+
   const handlePlayEvent = useCallback(() => {
     if (!reported && typeof onPlayed === "function" && videoId) {
-      try { onPlayed(videoId); } catch (err) { console.warn("onPlayed error:", err); }
-      setReported(true);
+        try { onPlayed(videoId); } catch (err) {}
+        setReported(true);
     }
     setIsPlaying(true);
+    setIsBuffering(false);
   }, [reported, onPlayed, videoId]);
 
-  const handlePauseEvent = useCallback(() => setIsPlaying(false), []);
-  const handlePlayingEvent = useCallback(() => setIsPlaying(true), []);
-  const handleEndedEvent = useCallback(() => {
-    setIsPlaying(false);
-    setSkippingMode(null);
-  }, []);
+  const handlePauseEvent = useCallback(() => { setIsPlaying(false); setIsBuffering(false); }, []);
+  const handleWaiting = useCallback(() => setIsBuffering(true), []);
+  const handleCanPlay = useCallback(() => setIsBuffering(false), []);
+  const handleEndedEvent = useCallback(() => { setIsPlaying(false); setSkippingMode(null); setShowControls(true); }, []);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return undefined;
     el.addEventListener("play", handlePlayEvent);
-    el.addEventListener("playing", handlePlayingEvent);
+    el.addEventListener("playing", handlePlayEvent);
     el.addEventListener("pause", handlePauseEvent);
+    el.addEventListener("waiting", handleWaiting);
+    el.addEventListener("canplay", handleCanPlay);
     el.addEventListener("ended", handleEndedEvent);
+    el.addEventListener("timeupdate", handleTimeUpdate);
+    el.addEventListener("loadedmetadata", handleLoadedMetadata);
     return () => {
       el.removeEventListener("play", handlePlayEvent);
-      el.removeEventListener("playing", handlePlayingEvent);
+      el.removeEventListener("playing", handlePlayEvent);
       el.removeEventListener("pause", handlePauseEvent);
+      el.removeEventListener("waiting", handleWaiting);
+      el.removeEventListener("canplay", handleCanPlay);
       el.removeEventListener("ended", handleEndedEvent);
+      el.removeEventListener("timeupdate", handleTimeUpdate);
+      el.removeEventListener("loadedmetadata", handleLoadedMetadata);
     };
-  }, [handlePlayEvent, handlePlayingEvent, handlePauseEvent, handleEndedEvent]);
+  }, [handlePlayEvent, handlePauseEvent, handleWaiting, handleCanPlay, handleEndedEvent]);
 
   // --- CONTROLS ---
-  const togglePlay = useCallback(async () => {
+  const togglePlay = useCallback(async (e) => {
+    e?.stopPropagation();
     const el = videoRef.current;
     if (!el) return;
-    try {
-      if (el.paused) await el.play(); else el.pause();
-    } catch (err) { console.warn("togglePlay failed:", err); }
+    try { if (el.paused) await el.play(); else el.pause(); } catch (err) {}
   }, []);
 
-  // --- KEYBOARD ---
-  const handleKeyboardAction = useCallback((e) => {
-    const el = videoRef.current;
-    if (!el) return false;
-    const active = document.activeElement;
-    if (active && (active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))) return false;
-
-    const key = e.key;
-    if ([" ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Escape", "Enter", "f"].includes(key)) e.preventDefault();
-
-    try {
-      if (key === " " || key === "Enter") {
-        if (el.paused) el.play(); else el.pause();
-        return true;
-      }
-      if (key === "f") {
-        toggleFullscreen();
-        return true;
-      }
-      switch (key) {
-        case "ArrowRight": el.currentTime += 5; return true;
-        case "ArrowLeft": el.currentTime -= 5; return true;
-        case "ArrowUp": el.volume = Math.min(1, el.volume + 0.05); return true;
-        case "ArrowDown": el.volume = Math.max(0, el.volume - 0.05); return true;
-        default: return false;
-      }
-    } catch { return false; }
-  }, [toggleFullscreen]);
-
-  useEffect(() => {
-    const onKey = (e) => handleKeyboardAction(e);
-    window.addEventListener("keydown", onKey, { passive: false });
-    return () => window.removeEventListener("keydown", onKey);
-  }, [handleKeyboardAction]);
-
-  // ==========================================
-  //  SMOOTH SKIP LOGIC
-  // ==========================================
-  
+  // --- SKIP LOGIC ---
   const startHoldAction = (direction) => {
     const el = videoRef.current;
     if (!el) return;
-
     isHoldingRef.current = true;
     wasPlayingRef.current = !el.paused;
     wasMutedRef.current = el.muted; 
-    
     setSkippingMode(direction);
+    setShowControls(false);
 
     if (direction === 'forward') {
         el.playbackRate = 3.0; 
         if (el.paused) el.play();
     } else {
-        el.muted = true;
+        el.muted = true; 
         el.playbackRate = 1.0;
         el.pause();
         const smoothRewind = () => {
@@ -190,49 +197,25 @@ export default function VideoPlayer({ video, onPlayed }) {
   const endHoldAction = () => {
     const el = videoRef.current;
     if (!el) return;
-
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     
-    // 1. Reset Speed
     el.playbackRate = 1.0;
-
-    // 2. Micro-Seek to fix audio/video drift
     el.currentTime = el.currentTime;
-
-    // 3. Restore State
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
 
-    // 4. Restore Audio with delay
-    setTimeout(() => {
-        if (el) el.muted = wasMutedRef.current;
-    }, 50);
-
+    setTimeout(() => { if (el) el.muted = wasMutedRef.current; }, 50);
     setSkippingMode(null);
+    showUI(); 
     setTimeout(() => { isHoldingRef.current = false; }, 100);
   };
 
-  const handleInteractionStart = (direction) => {
-    holdTimerRef.current = setTimeout(() => {
-        startHoldAction(direction);
-    }, 500);
-  };
-
+  const handleInteractionStart = (direction) => { holdTimerRef.current = setTimeout(() => { startHoldAction(direction); }, 500); };
   const handleInteractionEnd = (direction) => {
-    if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
-    }
-
-    if (isHoldingRef.current) {
-        endHoldAction();
-        return;
-    }
-
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    if (isHoldingRef.current) { endHoldAction(); return; }
     const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300;
-
-    if (now - lastTapTimeRef.current < DOUBLE_TAP_DELAY) {
+    if (now - lastTapTimeRef.current < 300) {
         const el = videoRef.current;
         if (el) {
             const time = direction === 'forward' ? 10 : -10;
@@ -240,8 +223,16 @@ export default function VideoPlayer({ video, onPlayed }) {
             setDoubleTapFeedback(direction);
             setTimeout(() => setDoubleTapFeedback(null), 600);
         }
+    } else {
+        toggleUI();
     }
     lastTapTimeRef.current = now;
+  };
+
+  const formatTime = (time) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
   if (!video) return null;
@@ -249,102 +240,136 @@ export default function VideoPlayer({ video, onPlayed }) {
   return (
     <div 
         ref={containerRef}
-        className="relative w-full aspect-video bg-black rounded-[2rem] overflow-hidden shadow-2xl group select-none outline-none fullscreen:rounded-none fullscreen:w-full fullscreen:h-full fullscreen:flex fullscreen:items-center fullscreen:justify-center"
+        className={`relative w-full aspect-video bg-black shadow-2xl group select-none outline-none ${isFullscreen ? 'rounded-none w-full h-full flex items-center justify-center' : 'rounded-2xl md:rounded-[2.5rem] overflow-hidden ring-1 ring-white/10'}`}
+        onMouseMove={showUI}
+        onMouseLeave={() => isPlaying && setShowControls(false)}
     >
-      
-      {/* Decorative Border Overlay (Hidden in Fullscreen) */}
-      {!isFullscreen && <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/10 pointer-events-none z-50" />}
-
       <video
         ref={videoRef}
-        controls={true}
-        controlsList="nofullscreen noremoteplayback" 
+        controls={false}
         playsInline 
         preload="metadata" 
-        // FIX: object-cover for mini player, object-contain for fullscreen
-        className={`w-full h-full block shadow-none outline-none fullscreen:w-full fullscreen:h-full ${isFullscreen ? 'object-contain' : 'object-cover'}`}
+        className={`w-full h-full block shadow-none outline-none ${isFullscreen ? 'object-contain' : 'object-cover'}`}
         src={src}
         poster={thumbnail_url || undefined}
       />
 
-      {/* --- CUSTOM FULLSCREEN TOGGLE --- */}
-      <div 
-        className="absolute top-3 right-3 sm:top-4 sm:right-4 z-50 p-2 rounded-full bg-black/40 backdrop-blur-md text-white/70 hover:text-white hover:bg-black/60 cursor-pointer transition-all border border-white/10 opacity-0 group-hover:opacity-100 touch-manipulation"
-        onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
-      >
-        {isFullscreen ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-5 sm:h-5"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
-        ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-5 sm:h-5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-        )}
+      {/* --- BUFFERING WHEEL (Responsive Size) --- */}
+      {isBuffering && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
+            <div className="w-10 h-10 md:w-16 md:h-16 border-4 border-white/20 border-t-emerald-500 rounded-full animate-spin filter drop-shadow-lg"></div>
+        </div>
+      )}
+
+      {/* --- CUSTOM PROGRESS BAR & CONTROLS --- */}
+      <div className={`absolute bottom-0 left-0 right-0 z-50 px-4 pb-4 pt-12 bg-gradient-to-t from-black/90 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className="flex items-center gap-3 md:gap-4 text-xs md:text-sm font-bold text-white mb-1">
+            
+            {/* Small Play Button (Bottom Bar) */}
+            <button onClick={togglePlay} className="hover:text-emerald-400 transition-colors p-1">
+                {isPlaying ? (
+                    <svg className="w-5 h-5 md:w-7 md:h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                ) : (
+                    <svg className="w-5 h-5 md:w-7 md:h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                )}
+            </button>
+            
+            <span className="min-w-[35px] md:min-w-[40px] text-center font-mono">{formatTime(currentTime)}</span>
+            
+            {/* PROGRESS BAR */}
+            <div className="flex-1 h-1 md:h-1.5 relative rounded-full cursor-pointer group">
+                {/* Background */}
+                <div className="absolute inset-0 bg-white/20 rounded-full"></div>
+                {/* Fill */}
+                <div 
+                    className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
+                    style={{ width: `${progress}%` }}
+                ></div>
+                {/* Thumb */}
+                <div 
+                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 md:w-4 md:h-4 bg-white rounded-full shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
+                ></div>
+                {/* Input */}
+                <input 
+                    type="range" min="0" max="100" value={progress} onChange={handleSeek}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                />
+            </div>
+
+            <span className="min-w-[35px] md:min-w-[40px] text-center font-mono">{formatTime(duration)}</span>
+            
+            {/* Fullscreen Button */}
+            <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="hover:text-emerald-400 transition-colors p-1">
+                {isFullscreen ? (
+                    <svg className="w-5 h-5 md:w-7 md:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                ) : (
+                    <svg className="w-5 h-5 md:w-7 md:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                )}
+            </button>
+        </div>
       </div>
 
-      {/* --- LEFT ZONE (Rewind) --- */}
+      {/* --- GESTURE ZONES (Left) --- */}
       <div 
-        className="absolute top-0 left-0 bottom-14 sm:bottom-16 w-[20%] sm:w-[25%] z-40 cursor-pointer select-none touch-none"
+        className="absolute top-0 left-0 bottom-20 w-[30%] z-40 cursor-pointer touch-none"
         onMouseDown={() => handleInteractionStart('rewind')}
         onMouseUp={() => handleInteractionEnd('rewind')}
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
         onTouchStart={() => handleInteractionStart('rewind')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('rewind'); }}
       >
-        {/* Floating Feedback (Left) - Clean */}
-        <div className={`absolute inset-0 flex items-center justify-start pl-4 sm:pl-12 transition-opacity duration-300 ${skippingMode === 'rewind' ? 'opacity-100' : 'opacity-0'}`}>
-             <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
-                <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="sm:w-10 sm:h-10"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
-                </div>
-                <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-black">Rewinding</span>
+        <div className={`absolute inset-0 flex items-center justify-start pl-8 transition-opacity duration-300 ${skippingMode === 'rewind' ? 'opacity-100' : 'opacity-0'}`}>
+             <div className="flex flex-col items-center drop-shadow-md">
+                <span className="text-3xl md:text-5xl text-emerald-400 animate-pulse">«</span>
+                <span className="text-[10px] md:text-xs font-black uppercase text-white tracking-widest mt-1 md:mt-2">Rewind</span>
              </div>
         </div>
-        {/* Tap Feedback */}
         {doubleTapFeedback === 'rewind' && (
             <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20 shadow-2xl">
-                    <span className="text-sm sm:text-xl font-black text-white drop-shadow-md">-10s</span>
+                <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20">
+                    <span className="text-xs md:text-lg font-black text-white drop-shadow-md">-10s</span>
                 </div>
             </div>
         )}
       </div>
 
-      {/* --- RIGHT ZONE (Forward) --- */}
+      {/* --- GESTURE ZONES (Right) --- */}
       <div 
-        className="absolute top-0 right-0 bottom-14 sm:bottom-16 w-[20%] sm:w-[25%] z-40 cursor-pointer select-none touch-none"
+        className="absolute top-0 right-0 bottom-20 w-[30%] z-40 cursor-pointer touch-none"
         onMouseDown={() => handleInteractionStart('forward')}
         onMouseUp={() => handleInteractionEnd('forward')}
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
         onTouchStart={() => handleInteractionStart('forward')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('forward'); }}
       >
-        {/* Floating Feedback (Right) - Clean */}
-        <div className={`absolute inset-0 flex items-center justify-end pr-4 sm:pr-12 transition-opacity duration-300 ${skippingMode === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
-             <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
-                <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="sm:w-10 sm:h-10"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
-                </div>
-                <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-white shadow-black">3x Speed</span>
+        <div className={`absolute inset-0 flex items-center justify-end pr-8 transition-opacity duration-300 ${skippingMode === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
+             <div className="flex flex-col items-center drop-shadow-md">
+                <span className="text-3xl md:text-5xl text-emerald-400 animate-pulse">»</span>
+                <span className="text-[10px] md:text-xs font-black uppercase text-white tracking-widest mt-1 md:mt-2">3x Speed</span>
              </div>
         </div>
-        {/* Tap Feedback */}
         {doubleTapFeedback === 'forward' && (
             <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20 shadow-2xl">
-                    <span className="text-sm sm:text-xl font-black text-white drop-shadow-md">+10s</span>
+                <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-md flex flex-col items-center justify-center border border-white/20">
+                    <span className="text-xs md:text-lg font-black text-white drop-shadow-md">+10s</span>
                 </div>
             </div>
         )}
       </div>
 
-      {/* --- CENTER PLAY OVERLAY --- */}
-      {!isPlaying && !skippingMode && (
+      {/* --- CENTER PLAY/PAUSE BUTTON (Responsive) --- */}
+      {!skippingMode && !isBuffering && (showControls || !isPlaying) && (
         <div 
           onClick={togglePlay}
-          className="absolute top-0 left-[20%] right-[20%] bottom-16 z-30 flex items-center justify-center cursor-pointer bg-transparent"
+          className="absolute inset-0 z-30 flex items-center justify-center cursor-pointer pointer-events-none" 
         >
-          <div className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_0_40px_rgba(16,185,129,0.5)] transform transition-transform duration-300 hover:scale-110 active:scale-95 hover:bg-emerald-400">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="ml-1 sm:w-6 sm:h-6">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          <div className="w-14 h-14 md:w-20 md:h-20 flex items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.6)] pointer-events-auto hover:scale-110 hover:bg-emerald-400 transition-all">
+            {isPlaying ? (
+               <svg className="w-6 h-6 md:w-8 md:h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+            ) : (
+               <svg className="w-6 h-6 md:w-8 md:h-8 ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            )}
           </div>
         </div>
       )}
