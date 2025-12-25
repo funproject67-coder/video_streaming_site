@@ -4,11 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * VideoPlayer — Clean Cinematic Engine
  * Features: 
- * 1. Lag-Free Audio Resync on Speed Change
- * 2. Audio Enabled during Fast Forward (3x)
- * 3. Native Progress Bar (Scrubber) Enabled
- * 4. Double Tap to Seek +/- 10s
- * 5. Auto-Rotate Orientation on Fullscreen
+ * 1. Fixed Fullscreen Zoom (Switches to object-contain)
+ * 2. Lag-Free Audio Resync
+ * 3. Native Progress Bar Enabled
+ * 4. Double Tap & Smooth Hold Gestures
  */
 export default function VideoPlayer({ video, onPlayed }) {
   const [reported, setReported] = useState(false);
@@ -160,7 +159,7 @@ export default function VideoPlayer({ video, onPlayed }) {
   }, [handleKeyboardAction]);
 
   // ==========================================
-  //  SMOOTH SKIP LOGIC (Lag-Free)
+  //  SMOOTH SKIP LOGIC
   // ==========================================
   
   const startHoldAction = (direction) => {
@@ -177,7 +176,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         el.playbackRate = 3.0; 
         if (el.paused) el.play();
     } else {
-        el.muted = true; // Mute rewind
+        el.muted = true;
         el.playbackRate = 1.0;
         el.pause();
         const smoothRewind = () => {
@@ -197,15 +196,14 @@ export default function VideoPlayer({ video, onPlayed }) {
     // 1. Reset Speed
     el.playbackRate = 1.0;
 
-    // 2. Micro-Seek (Forces engine to align Audio/Video timestamps)
-    // This prevents the "drift" or lag often heard after changing rates.
+    // 2. Micro-Seek to fix audio/video drift
     el.currentTime = el.currentTime;
 
-    // 3. Restore State with tiny delay for stability
+    // 3. Restore State
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
 
-    // 4. Restore Audio (Wait 50ms for speed to stabilize)
+    // 4. Restore Audio with delay
     setTimeout(() => {
         if (el) el.muted = wasMutedRef.current;
     }, 50);
@@ -254,7 +252,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         className="relative w-full aspect-video bg-black rounded-[2rem] overflow-hidden shadow-2xl group select-none outline-none fullscreen:rounded-none fullscreen:w-full fullscreen:h-full fullscreen:flex fullscreen:items-center fullscreen:justify-center"
     >
       
-      {/* Decorative Border Overlay */}
+      {/* Decorative Border Overlay (Hidden in Fullscreen) */}
       {!isFullscreen && <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/10 pointer-events-none z-50" />}
 
       <video
@@ -263,7 +261,8 @@ export default function VideoPlayer({ video, onPlayed }) {
         controlsList="nofullscreen noremoteplayback" 
         playsInline 
         preload="metadata" 
-        className="w-full h-full block object-cover shadow-none outline-none fullscreen:w-full fullscreen:h-full"
+        // FIX: object-cover for mini player, object-contain for fullscreen
+        className={`w-full h-full block shadow-none outline-none fullscreen:w-full fullscreen:h-full ${isFullscreen ? 'object-contain' : 'object-cover'}`}
         src={src}
         poster={thumbnail_url || undefined}
       />
@@ -289,7 +288,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchStart={() => handleInteractionStart('rewind')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('rewind'); }}
       >
-        {/* Floating Feedback (Left) */}
+        {/* Floating Feedback (Left) - Clean */}
         <div className={`absolute inset-0 flex items-center justify-start pl-4 sm:pl-12 transition-opacity duration-300 ${skippingMode === 'rewind' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                 <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
@@ -317,7 +316,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchStart={() => handleInteractionStart('forward')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('forward'); }}
       >
-        {/* Floating Feedback (Right) */}
+        {/* Floating Feedback (Right) - Clean */}
         <div className={`absolute inset-0 flex items-center justify-end pr-4 sm:pr-12 transition-opacity duration-300 ${skippingMode === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                 <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
