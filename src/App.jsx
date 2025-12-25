@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { supabase } from "./supabaseClient";
-import { motion, AnimatePresence } from "framer-motion"; // Ensure framer-motion is installed
+import { motion, AnimatePresence } from "framer-motion";
 
 import ViewerPage from "./components/ViewerPage";
 import AdminPage from "./components/AdminPage";
@@ -19,67 +19,82 @@ import {
 const VIDEO_BUCKET = "videos";
 
 /* -------------------------------------------------------
-    INITIAL SPLASH SCREEN
+    INITIAL SPLASH SCREEN (Cinematic Intro)
 ------------------------------------------------------- */
 const InitialLoader = () => (
   <motion.div 
     initial={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.5 }}
-    className="fixed inset-0 z-[100] bg-[#020617] flex flex-col items-center justify-center"
+    exit={{ opacity: 0, scale: 1.1, filter: "blur(10px)" }}
+    transition={{ duration: 0.8, ease: "easeInOut" }}
+    className="fixed inset-0 z-[100] bg-[#020617] flex flex-col items-center justify-center pointer-events-none"
   >
     <div className="relative">
-      <div className="absolute inset-0 bg-emerald-500 blur-2xl opacity-20 rounded-full animate-pulse" />
-      <div className="w-20 h-20 bg-[#0B1120] border border-white/10 rounded-2xl flex items-center justify-center relative z-10 shadow-2xl shadow-emerald-500/20">
-        <span className="text-4xl">S</span>
+      <div className="absolute inset-0 bg-emerald-500 blur-3xl opacity-20 rounded-full animate-pulse" />
+      <div className="w-24 h-24 bg-[#0B1120] border border-white/10 rounded-3xl flex items-center justify-center relative z-10 shadow-2xl shadow-emerald-500/10 ring-1 ring-white/5">
+        <span className="text-5xl font-black text-white drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]">S</span>
       </div>
     </div>
-    <h2 className="mt-6 text-white font-black tracking-[0.3em] uppercase text-sm animate-pulse">Initializing Studio</h2>
+    <div className="mt-8 flex flex-col items-center gap-2">
+        <h2 className="text-white font-black tracking-[0.5em] uppercase text-xs animate-pulse">Stream Studio</h2>
+        <div className="h-0.5 w-12 bg-emerald-500/50 rounded-full overflow-hidden">
+            <div className="h-full w-full bg-emerald-400 animate-progress origin-left" />
+        </div>
+    </div>
   </motion.div>
 );
 
 /* -------------------------------------------------------
-    TOP BAR
+    TOP BAR (Glassmorphic Navigation)
 ------------------------------------------------------- */
 function TopBar({ onRefresh, isAdminAuthed, onLogoutAdmin, isRefreshing }) {
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#020617]/80 backdrop-blur-md px-6 h-16 flex items-center justify-between transition-all duration-300">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 font-black shadow-[0_0_15px_rgba(16,185,129,0.3)]">S</div>
-        <h1 className="text-sm font-black tracking-widest text-white uppercase hidden sm:block">Stream <span className="text-emerald-500">Studio</span></h1>
+    <header className="fixed top-0 left-0 right-0 z-[60] h-16 px-4 md:px-8 flex items-center justify-between bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 transition-all duration-500">
+      {/* Logo Area */}
+      <div className="flex items-center gap-4 group cursor-default">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-slate-950 font-black text-lg shadow-[0_0_20px_rgba(16,185,129,0.25)] transition-transform group-hover:scale-105">
+            S
+        </div>
+        <h1 className="text-sm font-bold tracking-widest text-white uppercase hidden sm:block opacity-90 group-hover:opacity-100 transition-opacity">
+            Stream <span className="text-emerald-500">Studio</span>
+        </h1>
       </div>
 
-      <div className="flex items-center gap-4">
-        <nav className="flex items-center bg-white/5 rounded-full p-1 border border-white/5">
+      {/* Navigation & Actions */}
+      <div className="flex items-center gap-3 md:gap-5">
+        
+        {/* Nav Pills */}
+        <nav className="flex items-center bg-white/5 rounded-full p-1 border border-white/5 backdrop-blur-md">
           <Link
             to="/"
-            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${!isAdmin ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
+            className={`px-5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ${!isAdmin ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
           >
             Viewer
           </Link>
           <Link
             to="/admin"
-            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${isAdmin ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
+            className={`px-5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ${isAdmin ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
           >
             Console
           </Link>
         </nav>
 
-        <div className="h-4 w-px bg-white/10 mx-1"></div>
+        <div className="h-6 w-px bg-white/10 mx-1 hidden sm:block"></div>
 
+        {/* Admin Logout */}
         {isAdmin && isAdminAuthed && (
-          <button onClick={onLogoutAdmin} className="px-4 py-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 text-rose-400 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all">
+          <button onClick={onLogoutAdmin} className="hidden sm:block px-4 py-1.5 rounded-lg border border-rose-500/20 bg-rose-500/5 text-rose-400 text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all duration-300">
             Logout
           </button>
         )}
         
+        {/* Refresh Button */}
         <button 
           onClick={onRefresh} 
           disabled={isRefreshing}
-          className={`p-2 rounded-full text-slate-400 hover:text-emerald-400 hover:bg-white/5 transition-all ${isRefreshing ? "animate-spin text-emerald-500" : ""}`} 
+          className={`p-2.5 rounded-full bg-white/5 border border-white/5 text-slate-400 hover:text-emerald-400 hover:bg-white/10 hover:border-emerald-500/30 transition-all active:scale-95 ${isRefreshing ? "animate-spin text-emerald-500 border-emerald-500/30" : ""}`} 
           title="Refresh Data"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 21h5v-5" /></svg>
@@ -94,8 +109,8 @@ function TopBar({ onRefresh, isAdminAuthed, onLogoutAdmin, isRefreshing }) {
 ------------------------------------------------------- */
 export default function App() {
   const [videos, setVideos] = useState([]);
-  const [loading, setLoading] = useState(true); // Internal loading state
-  const [initialLoad, setInitialLoad] = useState(true); // For Splash Screen
+  const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [isAdminAuthed, setIsAdminAuthed] = useState(() => localStorage.getItem("isAdminAuthed") === "true");
   
@@ -119,7 +134,7 @@ export default function App() {
     try {
       const { error } = await supabase.from("videos").update(fields).eq("id", id);
       if (error) throw error;
-      await fetchVideos(false); // Background update
+      await fetchVideos(false);
       return { success: true };
     } catch (error) {
       alert(`Update failed: ${error?.message || String(error)}`);
@@ -127,7 +142,7 @@ export default function App() {
     }
   };
 
-  // --- Data Fetching (Optimized with Artificial Delay for UX) ---
+  // --- Data Fetching ---
   const fetchVideos = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setFetchError(null);
@@ -150,7 +165,7 @@ export default function App() {
         thumbnail_url: v.thumbnail_path ? getPublicUrlForThumbPath(v.thumbnail_path) : null,
       }));
 
-      // Force a minimum loading time of 800ms if showLoading is true (better UX for refresh)
+      // Smooth Loading UX
       if (showLoading) {
         const elapsed = Date.now() - startTime;
         const minLoadTime = 800; 
@@ -175,7 +190,7 @@ export default function App() {
       setFetchError(error?.message || String(error));
     } finally {
       setLoading(false);
-      setInitialLoad(false); // Disable splash screen after first load
+      setInitialLoad(false); 
     }
   }, [selected?.id]); 
 
@@ -189,13 +204,9 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, []);
   
-  // Explicit Refresh Handler
-  const onRefreshClick = () => {
-      fetchVideos(true);
-  };
+  const onRefreshClick = () => { fetchVideos(true); };
 
-  // ... (Keep handleAddExternal, handleUpload, handleDeleteVideo, etc. exactly as they were in previous code)
-  // Re-pasting handlers for brevity - ensure you keep your existing handlers here:
+  // --- Handlers (CRUD) ---
   const handleAddExternal = async (e, position) => {
     e.preventDefault();
     if (!externalVideo.title || !externalVideo.url) return;
@@ -330,7 +341,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 font-sans pt-16">
+    <div className="min-h-screen bg-[#020617] text-slate-100 font-sans pt-16 selection:bg-emerald-500/30">
       <AnimatePresence>
         {initialLoad && <InitialLoader />}
       </AnimatePresence>
@@ -339,14 +350,14 @@ export default function App() {
         onRefresh={onRefreshClick} 
         isAdminAuthed={isAdminAuthed} 
         onLogoutAdmin={handleLogoutAdmin} 
-        isRefreshing={loading && !initialLoad} // Pass Refresh state for spinning icon
+        isRefreshing={loading && !initialLoad}
       />
       
       <Routes>
         <Route path="/" element={
           <ViewerPage 
             videos={videos.filter(v => v.is_public !== false)} 
-            loading={loading} // Pass loading state
+            loading={loading} 
             fetchError={fetchError} 
             onVideoPlayed={handleVideoPlayed} 
             search={search}
@@ -361,7 +372,7 @@ export default function App() {
               rawVideos={videos}
               selected={selected}
               setSelected={setSelected}
-              loading={loading} // Pass loading state
+              loading={loading}
               
               search={search} setSearch={setSearch}
               filterType={filterType} setFilterType={setFilterType}
