@@ -4,11 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * VideoPlayer — Clean Cinematic Engine
  * Features: 
- * 1. ADDED: Space Bar to Play/Pause
- * 2. Transparent Floating Feedback (No rectangles/gradients)
- * 3. Smaller, Sleek Center Play Button
+ * 1. OPTIMIZED: Progress Bar for Mobile Portrait (Larger Hit Area, Tighter Layout)
+ * 2. Space Bar to Play/Pause
+ * 3. Transparent Floating Feedback
  * 4. Dual-Layer Colored Progress Bar
- * 5. Advanced Gestures & Buffering
  */
 export default function VideoPlayer({ video, onPlayed }) {
   // --- STATE ---
@@ -53,25 +52,21 @@ export default function VideoPlayer({ video, onPlayed }) {
 
   // --- CONTROLS ---
   const togglePlay = useCallback(async (e) => {
-    // e is optional here
     const el = videoRef.current;
     if (!el) return;
     try { if (el.paused) await el.play(); else el.pause(); } catch (err) {}
   }, []);
 
-  // --- KEYBOARD LISTENER (SPACE BAR) ---
+  // --- KEYBOARD LISTENER ---
   useEffect(() => {
     const handleKeyDown = (e) => {
-        // Check if the active element is an input field (to allow typing)
         const active = document.activeElement;
         if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
-
         if (e.code === "Space") {
-            e.preventDefault(); // Prevent page scroll
+            e.preventDefault(); 
             togglePlay();
         }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [togglePlay]);
@@ -173,7 +168,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     };
   }, [handlePlayEvent, handlePauseEvent, handleWaiting, handleCanPlay, handleEndedEvent]);
 
-  // --- GESTURES (SKIP) ---
+  // --- GESTURES ---
   const startHoldAction = (direction) => {
     const el = videoRef.current;
     if (!el) return;
@@ -202,12 +197,10 @@ export default function VideoPlayer({ video, onPlayed }) {
     const el = videoRef.current;
     if (!el) return;
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    
     el.playbackRate = 1.0;
     el.currentTime = el.currentTime; 
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
-
     setTimeout(() => { if (el) el.muted = wasMutedRef.current; }, 50);
     setSkippingMode(null);
     showUI(); 
@@ -234,6 +227,7 @@ export default function VideoPlayer({ video, onPlayed }) {
   };
 
   const formatTime = (time) => {
+    if (!time || isNaN(time)) return "0:00";
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
@@ -268,7 +262,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         </div>
       )}
 
-      {/* --- GESTURE ZONES (Left) --- */}
+      {/* --- GESTURE ZONES --- */}
       <div 
         className="absolute top-0 left-0 bottom-20 w-[30%] z-10 cursor-pointer touch-manipulation"
         onMouseDown={() => handleInteractionStart('rewind')}
@@ -294,7 +288,6 @@ export default function VideoPlayer({ video, onPlayed }) {
         )}
       </div>
 
-      {/* --- GESTURE ZONES (Right) --- */}
       <div 
         className="absolute top-0 right-0 bottom-20 w-[30%] z-10 cursor-pointer"
         onMouseDown={() => handleInteractionStart('forward')}
@@ -320,7 +313,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         )}
       </div>
 
-      {/* --- CENTER PLAY/PAUSE BUTTON --- */}
+      {/* --- CENTER PLAY BUTTON --- */}
       {!skippingMode && !isBuffering && (showControls || !isPlaying) && (
         <div 
             onClick={(e) => {
@@ -338,52 +331,50 @@ export default function VideoPlayer({ video, onPlayed }) {
       )}
 
       {/* --- BOTTOM CONTROLS --- */}
-      <div className={`absolute bottom-0 left-0 right-0 z-20 px-4 pb-3 pt-12 bg-gradient-to-t from-black/90 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <div className="flex items-center gap-3 text-xs md:text-sm font-bold text-white mb-1">
+      {/* Optimized for Portrait: Reduced padding (px-2) and Gap (gap-2) to give progress bar more width */}
+      <div className={`absolute bottom-0 left-0 right-0 z-20 px-2 md:px-4 pb-3 pt-12 bg-gradient-to-t from-black/90 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className="flex items-center gap-2 md:gap-4 text-[10px] md:text-sm font-bold text-white mb-1">
             
-            {/* Play/Pause (Small) */}
-            <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="hover:text-emerald-400 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="hover:text-emerald-400 transition-colors p-1">
                 {isPlaying ? (
-                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                    <svg className="w-5 h-5 md:w-6 md:h-6 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
                 ) : (
-                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <svg className="w-5 h-5 md:w-6 md:h-6 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 )}
             </button>
             
-            <span className="min-w-[40px] text-center font-mono">{formatTime(currentTime)}</span>
+            <span className="min-w-[30px] md:min-w-[40px] text-center font-mono tabular-nums">{formatTime(currentTime)}</span>
             
-            {/* DUAL-LAYER COLORED PROGRESS BAR */}
-            <div className="flex-1 h-1.5 relative rounded-full cursor-pointer group flex items-center">
-                {/* 1. Track BG */}
+            {/* DUAL-LAYER PROGRESS BAR */}
+            <div className="flex-1 h-1 md:h-1.5 relative rounded-full cursor-pointer group flex items-center">
+                {/* Visuals */}
                 <div className="absolute inset-0 bg-white/20 rounded-full"></div>
-                {/* 2. Progress Fill (Emerald) */}
                 <div 
                     className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-75" 
                     style={{ width: `${progress}%` }}
                 ></div>
-                {/* 3. Thumb (Visual) */}
                 <div 
                     className="absolute h-3 w-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
                     style={{ left: `${progress}%`, transform: 'translateX(-50%)' }}
                 ></div>
-                {/* 4. Input (Interaction) */}
+                
+                {/* HIT AREA OPTIMIZATION: h-8 (32px) invisible input for easier touch */}
                 <input 
                     type="range" min="0" max="100" step="0.1"
                     value={progress} 
                     onChange={handleSeek}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30"
+                    className="absolute -top-3 bottom-0 w-full h-8 opacity-0 cursor-pointer z-30 touch-none"
                 />
             </div>
 
-            <span className="min-w-[40px] text-center font-mono">{formatTime(duration)}</span>
+            <span className="min-w-[30px] md:min-w-[40px] text-center font-mono tabular-nums">{formatTime(duration)}</span>
             
-            {/* Fullscreen Button */}
-            <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="hover:text-emerald-400 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="hover:text-emerald-400 transition-colors p-1">
                 {isFullscreen ? (
-                    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                    <svg className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
                 ) : (
-                    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    <svg className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                 )}
             </button>
         </div>
