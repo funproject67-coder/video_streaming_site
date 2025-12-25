@@ -1,4 +1,5 @@
 /* eslint-disable no-irregular-whitespace */
+/* eslint-disable no-unused-vars */
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import VideoPlayer from "./VideoPlayer";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,9 +34,9 @@ const ModalBase = ({ title, onClose, children, size = "max-w-lg" }) => (
       initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }}
       className={`relative z-[110] w-full ${size} rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl shadow-emerald-900/20 backdrop-blur-2xl max-h-[85vh] overflow-y-auto custom-scrollbar`}
     >
-      <div className="mb-3 flex items-center justify-between border-b border-white/5 pb-2">
-        <h3 className="text-sm font-black text-emerald-400 uppercase tracking-widest">{title}</h3>
-        <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/5 text-slate-400 transition-colors">✕</button>
+      <div className="mb-4 flex items-center justify-between border-b border-white/5 pb-3">
+        <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest">{title}</h3>
+        <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition-colors">✕</button>
       </div>
       {children}
     </motion.div>
@@ -43,7 +44,7 @@ const ModalBase = ({ title, onClose, children, size = "max-w-lg" }) => (
 );
 
 /**
- * UI PRIMITIVES: GLASS LIBRARY CARD
+ * UI PRIMITIVES: LIBRARY CARD
  */
 function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, handleDragStart, handleDragOver, handleDrop, isDragging, isSortable, permanentOrder }) {
   const thumb = item.thumbnail_url || item.public_url || item.external_url || null;
@@ -57,19 +58,23 @@ function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, h
       onDragStart={isSortable ? (e) => handleDragStart(e, item.id) : undefined}
       onDragOver={isSortable ? handleDragOver : undefined}
       onDrop={isSortable ? (e) => handleDrop(e, item.id) : undefined}
-      className={`group flex gap-3 p-2 rounded-xl cursor-pointer items-center transition-all duration-200 border relative
-        ${active ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]" : "bg-white/[0.03] border-white/5 hover:border-white/20"}
+      className={`group flex gap-3 p-2 rounded-xl cursor-pointer items-center transition-all duration-200 border relative select-none
+        ${active ? "bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]" : "bg-white/[0.02] border-white/5 hover:border-white/20 hover:bg-white/5"}
         ${isSelectedForBulk ? "ring-1 ring-emerald-500 bg-emerald-500/5" : ""}
-        ${isDragging ? "opacity-30 border-dashed border-emerald-500" : ""}
+        ${isDragging ? "opacity-30 border-dashed border-emerald-500 scale-95" : ""}
       `}
     >
-      <div className="flex flex-col items-center gap-1 flex-shrink-0 w-5">
-        <span className="text-[9px] font-black text-slate-500 w-full text-center">{permanentOrder}</span>
-        {isSortable && <div className="text-slate-600 group-hover:text-emerald-500 transition-colors text-[10px] cursor-grab">⠿</div>}
+      <div className="flex flex-col items-center gap-1 flex-shrink-0 w-6">
+        <span className="text-[9px] font-black text-slate-500 w-full text-center tabular-nums">{permanentOrder}</span>
+        {isSortable && <div className="text-slate-600 group-hover:text-emerald-500 transition-colors text-[10px] cursor-grab active:cursor-grabbing">⠿</div>}
       </div>
 
-      <div className="w-14 h-9 flex-shrink-0 rounded-md overflow-hidden bg-black relative ring-1 ring-white/10">
-        <img src={thumb} alt={item.title || item.id} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+      <div className="w-16 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black relative ring-1 ring-white/10 shadow-sm">
+        {thumb ? (
+            <img src={thumb} alt={item.title || item.id} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+        ) : (
+            <div className="w-full h-full flex items-center justify-center bg-slate-800 text-[8px] text-slate-500 font-mono">NO IMG</div>
+        )}
         <div className="absolute top-0 right-0 m-0.5 flex gap-0.5">
             {item.is_featured && <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_5px_rgba(251,191,36,0.8)]" />}
             {item.is_public !== false && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.8)]" />}
@@ -77,9 +82,9 @@ function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, h
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className={`font-bold truncate text-[11px] ${active ? "text-emerald-400" : "text-slate-200"}`}>{item.title || `#${item.id}`}</div>
-        <div className="text-[8px] text-slate-500 font-black uppercase tracking-widest mt-0.5 flex gap-2 items-center">
-            <span className="text-emerald-500/60 truncate max-w-[60px]">{item.category || "General"}</span>
+        <div className={`font-bold truncate text-[11px] leading-tight ${active ? "text-emerald-400" : "text-slate-200"}`}>{item.title || `#${item.id}`}</div>
+        <div className="text-[8px] text-slate-500 font-black uppercase tracking-widest mt-1 flex gap-2 items-center">
+            <span className="text-emerald-500/60 truncate max-w-[80px]">{item.category || "General"}</span>
             <span className="opacity-20">|</span>
             <span className="truncate">{item.source_type}</span>
         </div>
@@ -87,7 +92,7 @@ function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, h
 
       <button
         onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
-        className={`w-6 h-6 rounded-full flex items-center justify-center transition-all border text-[9px]
+        className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all border text-[10px]
           ${isSelectedForBulk ? "bg-emerald-500 border-emerald-500 text-slate-950 font-black" : "bg-white/5 border-white/10 text-slate-500 hover:text-white hover:bg-white/10"}`}
       >
         {isSelectedForBulk ? "✓" : "+"}
@@ -103,9 +108,9 @@ const useTabState = (defaultTab) => {
         <button
             key={tab} 
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all 
+            className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all 
                 ${activeTab === tab 
-                ? "bg-emerald-500 text-slate-950" 
+                ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" 
                 : "text-slate-500 hover:text-white hover:bg-white/5"
             }`}
         >
@@ -117,7 +122,7 @@ const useTabState = (defaultTab) => {
 
 /* ===========================
     Main AdminPage component
-    =========================== */
+   =========================== */
 export default function AdminPage(props) {
   const {
     videos = [], rawVideos = [], selected = null, setSelected = () => {}, loading = false, fetchError = null,
@@ -266,10 +271,9 @@ export default function AdminPage(props) {
     if (draggedIds.length === 0 || draggedIds.includes(targetId) || !isSortable) return;
     const movedItems = localVideos.filter(v => draggedIds.includes(v.id));
     const remainingVideos = localVideos.filter(v => !draggedIds.includes(v.id));
-    const targetOriginalIndex = localVideos.findIndex(v => v.id === targetId);
-    const firstDraggedItemOriginalIndex = localVideos.findIndex(v => v.id === draggedIds[0]);
-    const targetIndexInRemaining = remainingVideos.findIndex(v => v.id === targetId);
-    let insertionIndex = targetIndexInRemaining === -1 ? remainingVideos.length : (firstDraggedItemOriginalIndex < targetOriginalIndex ? targetIndexInRemaining + 1 : targetIndexInRemaining);
+    const targetIndex = remainingVideos.findIndex(v => v.id === targetId);
+    let insertionIndex = targetIndex === -1 ? remainingVideos.length : targetIndex;
+    
     setLocalVideos([...remainingVideos.slice(0, insertionIndex), ...movedItems, ...remainingVideos.slice(insertionIndex)]);
     setReorderConfirmed(false);
   };
@@ -366,7 +370,6 @@ export default function AdminPage(props) {
   };
   const setEditField = (k, v) => setEditFields((p) => ({ ...p, [k]: v }));
   
-  // Edit Submit (Correctly Filtered)
   const handleEditSubmit = async (e) => {
     e?.preventDefault(); if (!editingVideo) return;
     setEditSaving(true);
@@ -426,7 +429,7 @@ export default function AdminPage(props) {
   };
   
   // ==========================================
-  //  LOGIN SCREEN (Re-Integrated)
+  //  LOGIN SCREEN
   // ==========================================
   if (!isAdminAuthed) {
     return (
@@ -442,8 +445,6 @@ export default function AdminPage(props) {
           className="w-full max-w-md p-8 rounded-3xl bg-slate-900/50 border border-white/10 backdrop-blur-2xl shadow-2xl shadow-emerald-900/20"
         >
           <div className="flex flex-col items-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] mb-4">S</div>
-            <h1 className="text-2xl font-black tracking-tighter text-white uppercase">Console <span className="text-emerald-500">Terminal</span></h1>
             <p className="text-xs text-slate-500 font-bold tracking-widest uppercase mt-2">Restricted Access</p>
           </div>
 
@@ -476,7 +477,7 @@ export default function AdminPage(props) {
   }
 
   // ==========================================
-  //  MAIN DASHBOARD (If authenticated)
+  //  MAIN DASHBOARD
   // ==========================================
   return (
     <main className="h-screen flex flex-col bg-[#020617] text-slate-100 overflow-hidden relative isolate font-sans selection:bg-emerald-500/30">
@@ -487,8 +488,7 @@ export default function AdminPage(props) {
 
       <header className="h-16 flex-shrink-0 flex items-center justify-between px-6 bg-slate-950/40 border-b border-white/5 backdrop-blur-xl z-50">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 font-black shadow-[0_0_15px_rgba(16,185,129,0.4)]">S</div>
-          <div className="text-lg font-black tracking-tighter uppercase text-white">Console <span className="text-emerald-500 text-sm">Terminal</span></div>
+          <div className="text-lg font-black tracking-tighter uppercase text-white"> <span className="text-emerald-500 text-sm">Admin Terminal</span></div>
         </div>
         <div className="flex gap-3">
           <button onClick={() => setShowAddModal(true)} className="px-6 py-2.5 rounded-full bg-[#0B1120] border border-white/10 hover:border-white/20 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg">Link External</button>
@@ -505,8 +505,8 @@ export default function AdminPage(props) {
         <aside style={{ width: `${leftWidth}%` }} className="flex flex-col bg-slate-950/20 border-r border-white/5 backdrop-blur-sm p-4 overflow-hidden min-w-[220px]">
           <div className="mb-4 space-y-2">
             <div className="relative">
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter library..." className="w-full pl-9 pr-4 py-2.5 rounded-2xl bg-white/5 border border-white/5 text-xs outline-none focus:border-emerald-500 transition-all placeholder:text-slate-600" />
-                <span className="absolute left-3 top-3 text-slate-500 text-xs">🔍</span>
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter library..." className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/5 text-xs outline-none focus:border-emerald-500 transition-all placeholder:text-slate-600" />
+                <span className="absolute left-3 top-2.5 text-slate-500 text-sm">🔍</span>
             </div>
             <div className="flex gap-2">
                 <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full bg-white/5 border border-white/5 rounded-xl px-2 py-2 text-[10px] font-black uppercase text-slate-400 outline-none cursor-pointer hover:bg-white/10">
@@ -551,7 +551,7 @@ export default function AdminPage(props) {
 
         <div className="w-1.5 cursor-col-resize bg-transparent hover:bg-emerald-500/50 transition-colors z-20" onMouseDown={(e) => startResize(e, 'left')} />
 
-        {/* CENTER: STAGE (Compacted) */}
+        {/* CENTER: STAGE */}
         <section className="flex-1 min-w-0 flex flex-col p-6 bg-slate-950/10 overflow-y-auto">
           {selected ? (
             <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="max-w-6xl mx-auto w-full space-y-4">
@@ -570,7 +570,7 @@ export default function AdminPage(props) {
                 </div>
               </div>
 
-              <div className="rounded-[2rem] overflow-hidden bg-black ring-1 ring-white/10 shadow-2xl shadow-black/50">
+              <div className="rounded-[2rem] overflow-hidden bg-black ring-1 ring-white/10 shadow-2xl shadow-black/50 aspect-video">
                 <VideoPlayer video={selected} onPlayed={onVideoPlayed} />
               </div>
 
@@ -602,7 +602,7 @@ export default function AdminPage(props) {
           
           <div className="flex gap-1 bg-white/5 p-1 rounded-xl mb-4">
             {['metadata', 'thumbnail', 'raw'].map(t => (
-              <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === t ? 'bg-emerald-500 text-slate-950' : 'text-slate-500 hover:text-white'}`}>{t}</button>
+              <TabButton key={t} tab={t}>{t}</TabButton>
             ))}
           </div>
 
@@ -639,7 +639,6 @@ export default function AdminPage(props) {
 
                     <div className="pt-2 border-t border-white/5 space-y-2">
                         <div className="space-y-1">
-                            {/* Read-Only Thumb URL (Computed) */}
                             <label className="text-[8px] font-black text-sky-500 uppercase ml-2 tracking-widest">Thumb URL (Read-only)</label>
                             <input value={selected.thumbnail_url || ""} readOnly className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/5 text-xs font-mono text-slate-500 outline-none cursor-not-allowed" />
                         </div>
@@ -683,13 +682,13 @@ export default function AdminPage(props) {
                       <button onClick={handleThumbnailCaptureClick} className="flex-1 py-2 rounded-lg bg-emerald-500 text-slate-950 text-[9px] font-black uppercase hover:bg-emerald-400 transition-colors">Capture from Video</button>
                     </div>
                     <div className="flex gap-1">
-                       <label className="flex-1 py-2.5 rounded-lg bg-white/5 border border-white/5 text-slate-400 text-[9px] font-black uppercase text-center cursor-pointer hover:bg-white/10 transition-all">
-                         {thumbFile ? `✓ ${thumbFile.name.substring(0, 10)}...` : 'Upload File'}
-                         <input type="file" className="hidden" onChange={(e) => handleThumbFile(e.target.files[0])} />
-                       </label>
-                       {thumbFile && (
+                        <label className="flex-1 py-2.5 rounded-lg bg-white/5 border border-white/5 text-slate-400 text-[9px] font-black uppercase text-center cursor-pointer hover:bg-white/10 transition-all">
+                          {thumbFile ? `✓ ${thumbFile.name.substring(0, 10)}...` : 'Upload File'}
+                          <input type="file" className="hidden" onChange={(e) => handleThumbFile(e.target.files[0])} />
+                        </label>
+                        {thumbFile && (
                            <button onClick={handleCustomThumbUpload} className="px-4 py-2 rounded-lg bg-emerald-500 text-slate-900 text-[9px] font-black uppercase shadow-lg shadow-emerald-500/20">Push</button>
-                       )}
+                        )}
                     </div>
                     <button onClick={handleRemoveThumbnail} className="w-full py-2.5 rounded-lg bg-rose-500/10 text-rose-500 text-[9px] font-black uppercase hover:bg-rose-500 hover:text-white transition-all border border-rose-500/20">Purge Thumbnail</button>
                  </div>
