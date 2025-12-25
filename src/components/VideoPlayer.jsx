@@ -3,17 +3,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * VideoPlayer — Final Production Version
- * * DESIGN SPECS:
- * - Mobile Button: 40px (w-10) | Desktop Button: 56px (w-14)
- * - Mobile Text: 9px | Desktop Text: 12px
- * - Progress Bar: Dual-layer visual with 32px invisible touch target
- * - Gestures: Floating icons with drop-shadow (no background containers)
+ * * UPDATES:
+ * - Removed initial buffering state (Clean start)
+ * - Video sits ready with thumbnail until interaction
  */
 export default function VideoPlayer({ video, onPlayed }) {
   // --- STATE ---
   const [reported, setReported] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(true);
+  const [isBuffering, setIsBuffering] = useState(false); // FIXED: Start as false
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   
@@ -44,7 +42,7 @@ export default function VideoPlayer({ video, onPlayed }) {
   useEffect(() => {
     setReported(false);
     setIsPlaying(false);
-    setIsBuffering(true); 
+    setIsBuffering(false); // FIXED: Do not show spinner on load
     setSkippingMode(null);
     setDoubleTapFeedback(null);
     setProgress(0);
@@ -84,7 +82,6 @@ export default function VideoPlayer({ video, onPlayed }) {
   const showUI = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    // Only auto-hide if playing and not currently scrubbing/holding
     if (isPlaying && !skippingMode && !isHoldingRef.current) {
         controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
     }
@@ -110,7 +107,6 @@ export default function VideoPlayer({ video, onPlayed }) {
     const handleFsChange = () => {
         const isFs = !!document.fullscreenElement;
         setIsFullscreen(isFs);
-        // Attempt orientation lock on mobile
         if (isFs && window.screen?.orientation?.lock) window.screen.orientation.lock("landscape").catch(() => {});
         else if (!isFs && window.screen?.orientation?.unlock) window.screen.orientation.unlock();
     };
@@ -130,7 +126,6 @@ export default function VideoPlayer({ video, onPlayed }) {
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
         setDuration(videoRef.current.duration);
-        if (videoRef.current.readyState >= 3) setIsBuffering(false);
     }
   };
 
@@ -204,7 +199,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     
     el.playbackRate = 1.0;
-    el.currentTime = el.currentTime; // Resync audio
+    el.currentTime = el.currentTime; 
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
 
@@ -266,7 +261,7 @@ export default function VideoPlayer({ video, onPlayed }) {
 
       {/* --- LAYER 4: BUFFERING --- */}
       {isBuffering && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none bg-black/10 backdrop-blur-[1px]">
+        <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
             <div className="w-10 h-10 md:w-14 md:h-14 border-4 border-white/20 border-t-emerald-500 rounded-full animate-spin drop-shadow-xl"></div>
         </div>
       )}
@@ -323,7 +318,6 @@ export default function VideoPlayer({ video, onPlayed }) {
       </div>
 
       {/* --- LAYER 3: CENTER PLAY BUTTON --- */}
-      {/* Optimized: Smaller, centered, high z-index to catch clicks */}
       {!skippingMode && !isBuffering && (showControls || !isPlaying) && (
         <div 
             onClick={(e) => {
