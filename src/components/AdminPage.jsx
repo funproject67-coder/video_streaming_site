@@ -3,8 +3,24 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import VideoPlayer from "./VideoPlayer";
 import { motion, AnimatePresence } from "framer-motion";
 
+// --- SKELETON LOADER FOR LIBRARY ---
+const LibraryListSkeleton = () => (
+  <div className="space-y-2">
+    {[...Array(10)].map((_, i) => (
+      <div key={i} className="flex gap-3 p-2 rounded-xl bg-white/[0.02] border border-white/5 animate-pulse">
+        <div className="w-5 h-5 bg-white/5 rounded-md flex-shrink-0" />
+        <div className="w-14 h-9 bg-white/5 rounded-md flex-shrink-0" />
+        <div className="flex-1 space-y-2 py-1">
+          <div className="h-2 bg-white/5 rounded w-3/4" />
+          <div className="h-1.5 bg-white/5 rounded w-1/2" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 /**
- * UI PRIMITIVES: GLASS MODAL (Compacted & Scrollable)
+ * UI PRIMITIVES: GLASS MODAL (Compacted)
  */
 const ModalBase = ({ title, onClose, children, size = "max-w-lg" }) => (
   <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -15,7 +31,6 @@ const ModalBase = ({ title, onClose, children, size = "max-w-lg" }) => (
     />
     <motion.div 
       initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }}
-      // Changed max-h to 85vh and reduced padding to prevent cropping on small screens
       className={`relative z-[110] w-full ${size} rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl shadow-emerald-900/20 backdrop-blur-2xl max-h-[85vh] overflow-y-auto custom-scrollbar`}
     >
       <div className="mb-3 flex items-center justify-between border-b border-white/5 pb-2">
@@ -208,6 +223,7 @@ export default function AdminPage(props) {
     if (!selected && Array.isArray(localVideos) && localVideos.length > 0) setSelected(localVideos[0]);
   }, [localVideos]);
 
+  // Editor Reset
   useEffect(() => {
     setEditingVideo(null); setThumbFile(null); setFilePreview(null); setThumbMsg("");
     if (selected) setActiveTab('metadata');
@@ -324,6 +340,15 @@ export default function AdminPage(props) {
     } catch (err) { console.error("bulk action failed", err); alert("Bulk action failed."); }
   };
 
+  // Login Handler
+  const handleLoginSubmit = (e) => {
+    e?.preventDefault();
+    const envPass = import.meta.env.VITE_ADMIN_PASSWORD;
+    if (!envPass) { setLoginError("VITE_ADMIN_PASSWORD not set"); return; }
+    if (inputPassword === envPass) { setLoginError(""); setInputPassword(""); onAdminLogin && onAdminLogin(); }
+    else setLoginError("Incorrect password");
+  };
+
   const handleDeleteVideoAndClose = (video) => { 
     if (!window.confirm(`Are you sure you want to delete "${video.title || video.id}"? This cannot be undone.`)) return;
     onDeleteVideo(video); setSelected(null);
@@ -341,7 +366,7 @@ export default function AdminPage(props) {
   };
   const setEditField = (k, v) => setEditFields((p) => ({ ...p, [k]: v }));
   
-  // Edit Submit
+  // Edit Submit (Correctly Filtered)
   const handleEditSubmit = async (e) => {
     e?.preventDefault(); if (!editingVideo) return;
     setEditSaving(true);
@@ -349,8 +374,8 @@ export default function AdminPage(props) {
       title: editFields.title?.trim() || null, description: editFields.description?.trim() || null, category: editFields.category?.trim() || null, tags: editFields.tags?.trim() || null,
     };
     if (editingVideo.source_type === "external") payload.external_url = editFields.external_url?.trim() || null;
-    if (editFields.thumbnail_path) payload.thumbnail_path = editFields.thumbnail_path.trim();
-    if (editFields.file_path) payload.file_path = editFields.file_path.trim();
+    if (editFields.thumbnail_path !== undefined) payload.thumbnail_path = editFields.thumbnail_path.trim() || null;
+    if (editFields.file_path !== undefined) payload.file_path = editFields.file_path.trim() || null;
 
     try {
       await onUpdateVideo(editingVideo.id, payload);
@@ -374,7 +399,6 @@ export default function AdminPage(props) {
     setLocalVideos(newVideos); setReorderConfirmed(false); setSelected(videoToMove); alert(`Moved locally. Save Order to persist.`);
   };
 
-  // Thumbnail Handlers
   const handleThumbnailCaptureClick = async () => {
     if (!selected || !onUpdateThumbnail) return;
     try { await onUpdateThumbnail(selected, Number(thumbSecond) || 7); setThumbMsg("Capture requested."); }
@@ -401,38 +425,61 @@ export default function AdminPage(props) {
     } else setThumbMsg("onRemoveThumbnail not implemented.");
   };
   
-  // Reorder Modal
-  const ReorderModal = () => (
-    <ModalBase title="Reorder Asset List" onClose={() => setShowReorderModal(false)} size="max-w-xs">
-        <div className="flex flex-col gap-3">
-            <div className="p-3 rounded-lg border border-amber-500/50 bg-slate-900/50 space-y-2">
-                <div className="flex items-center gap-2 pb-2 border-b border-amber-700">
-                    <div className="flex-1 min-w-0">
-                        <div className="font-extrabold text-sm text-amber-300 leading-tight">Reordering Mode</div>
-                        <div className="text-xs text-amber-500">Drag and drop items in the list.</div>
-                    </div>
-                </div>
-                <div className="p-2 rounded-lg bg-slate-800 border border-amber-800/50">
-                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-100 cursor-pointer">
-                        <input type="checkbox" checked={reorderConfirmed} onChange={(e) => setReorderConfirmed(e.target.checked)} className="form-checkbox h-4 w-4 text-amber-500 bg-slate-700 border-slate-500 rounded focus:ring-amber-500" />
-                        I confirm the new list order.
-                    </label>
-                </div>
-                <div className="flex flex-col gap-2 pt-1">
-                    <button onClick={saveOrder} className={`w-full px-3 py-2 text-xs rounded-lg font-extrabold transition disabled:opacity-50 ${reorderConfirmed ? "bg-amber-500 text-slate-900 hover:bg-amber-400" : "bg-slate-700 text-slate-400"}`} disabled={!reorderConfirmed}>💾 Save New Order</button>
-                    <button onClick={() => { setLocalVideos((p) => p.slice().reverse()); setReorderConfirmed(false); }} className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-700/70 bg-transparent text-slate-400 transition hover:bg-slate-700">Reverse Order</button>
-                    <button onClick={() => setShowReorderModal(false)} className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-700/70 bg-transparent text-slate-400 transition hover:bg-slate-800">Close Menu</button>
-                </div>
-            </div>
+  // ==========================================
+  //  LOGIN SCREEN (Re-Integrated)
+  // ==========================================
+  if (!isAdminAuthed) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#020617] text-slate-100 relative overflow-hidden font-sans selection:bg-emerald-500/30">
+        <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-600/10 blur-[120px]" />
+          <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]" />
         </div>
-    </ModalBase>
-  );
 
-  if (!isAdminAuthed) return null;
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }} 
+          animate={{ opacity: 1, scale: 1 }} 
+          className="w-full max-w-md p-8 rounded-3xl bg-slate-900/50 border border-white/10 backdrop-blur-2xl shadow-2xl shadow-emerald-900/20"
+        >
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] mb-4">S</div>
+            <h1 className="text-2xl font-black tracking-tighter text-white uppercase">Console <span className="text-emerald-500">Terminal</span></h1>
+            <p className="text-xs text-slate-500 font-bold tracking-widest uppercase mt-2">Restricted Access</p>
+          </div>
 
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <input 
+              type="password" 
+              value={inputPassword} 
+              onChange={(e) => setInputPassword(e.target.value)} 
+              placeholder="Enter Access Key" 
+              className="w-full px-5 py-4 rounded-2xl bg-white/5 border border-white/10 text-center text-white placeholder:text-slate-600 focus:border-emerald-500/50 outline-none transition-all tracking-widest"
+              autoFocus
+            />
+            
+            {loginError && (
+              <div className="text-rose-500 text-xs text-center font-bold uppercase tracking-wide bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                {loginError}
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              className="w-full py-4 rounded-2xl bg-emerald-500 text-slate-950 font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
+            >
+              Authenticate
+            </button>
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  //  MAIN DASHBOARD (If authenticated)
+  // ==========================================
   return (
     <main className="h-screen flex flex-col bg-[#020617] text-slate-100 overflow-hidden relative isolate font-sans selection:bg-emerald-500/30">
-      {/* Background Mesh */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-600/10 blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]" />
@@ -444,7 +491,6 @@ export default function AdminPage(props) {
           <div className="text-lg font-black tracking-tighter uppercase text-white">Console <span className="text-emerald-500 text-sm">Terminal</span></div>
         </div>
         <div className="flex gap-3">
-          {/* UPDATED HEADER BUTTONS */}
           <button onClick={() => setShowAddModal(true)} className="px-6 py-2.5 rounded-full bg-[#0B1120] border border-white/10 hover:border-white/20 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-lg">Link External</button>
           <label className="px-6 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-lg shadow-emerald-500/20 flex items-center gap-2">
             Upload Asset
@@ -481,12 +527,14 @@ export default function AdminPage(props) {
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-            {filtered.map((v, i) => {
-               const permIndex = localVideos.findIndex(lv => lv.id === v.id) + 1;
-               return (
-                <LibraryCard key={v.id} item={v} selected={selected} setSelected={setSelected} toggleSelect={toggleSelect} selectedIds={selectedIds} isSortable={isSortable} permanentOrder={permIndex} handleDragStart={handleDragStart} handleDragOver={(e)=>e.preventDefault()} handleDrop={handleDrop} isDragging={draggedItemIds.includes(v.id)} />
-               );
-            })}
+            {loading ? <LibraryListSkeleton /> : (
+                filtered.map((v, i) => {
+                   const permIndex = localVideos.findIndex(lv => lv.id === v.id) + 1;
+                   return (
+                    <LibraryCard key={v.id} item={v} selected={selected} setSelected={setSelected} toggleSelect={toggleSelect} selectedIds={selectedIds} isSortable={isSortable} permanentOrder={permIndex} handleDragStart={handleDragStart} handleDragOver={(e)=>e.preventDefault()} handleDrop={handleDrop} isDragging={draggedItemIds.includes(v.id)} />
+                   );
+                })
+            )}
           </div>
 
           {selectedIds.size > 0 && (
@@ -503,22 +551,19 @@ export default function AdminPage(props) {
 
         <div className="w-1.5 cursor-col-resize bg-transparent hover:bg-emerald-500/50 transition-colors z-20" onMouseDown={(e) => startResize(e, 'left')} />
 
-        {/* CENTER: STAGE (Scaled Down Contents) */}
+        {/* CENTER: STAGE (Compacted) */}
         <section className="flex-1 min-w-0 flex flex-col p-6 bg-slate-950/10 overflow-y-auto">
           {selected ? (
             <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="max-w-6xl mx-auto w-full space-y-4">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <div className="flex gap-2">
-                    {/* Compact Badges */}
                     <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-widest">{selected.source_type}</span>
                     <span className="px-1.5 py-0.5 rounded bg-white/5 text-slate-500 text-[9px] font-black uppercase tracking-widest">ID: {selected.id}</span>
                   </div>
-                  {/* Smaller Title */}
-                  <h2 className="text-2xl font-black text-white tracking-tighter uppercase leading-none">{selected.title || `#${selected.id}`}</h2>
+                  <h2 className="text-2xl font-black text-white tracking-tighter uppercase leading-tight max-w-2xl">{selected.title}</h2>
                 </div>
-                {/* Smaller Buttons */}
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-shrink-0">
                    <button onClick={() => onTogglePublicWrapper(selected.id)} className={`p-2 rounded-lg border transition-all ${selected.is_public !== false ? 'bg-emerald-500 border-emerald-500 text-slate-950 font-bold' : 'bg-white/5 border-white/10 text-slate-500 hover:text-white'}`}>👁️</button>
                    <button onClick={() => onToggleFeaturedWrapper(selected.id)} className={`p-2 rounded-lg border transition-all ${selected.is_featured ? 'bg-amber-400 border-amber-400 text-slate-950' : 'bg-white/5 border-white/10 text-slate-500 hover:text-white'}`}>⭐</button>
                    <button onClick={() => handleDeleteVideoAndClose(selected)} className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white transition-all">🗑️</button>
@@ -529,8 +574,7 @@ export default function AdminPage(props) {
                 <VideoPlayer video={selected} onPlayed={onVideoPlayed} />
               </div>
 
-              {/* Smaller Stats Grid */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 text-center backdrop-blur-sm">
                   <div className="text-lg font-black text-white">{selected.view_count || 0}</div>
                   <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mt-0.5">Registry Hits</div>
