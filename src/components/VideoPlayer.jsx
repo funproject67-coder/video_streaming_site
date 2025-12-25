@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * VideoPlayer — Clean Cinematic Engine (Refined)
- * * UPDATES:
- * - Smaller Center Play/Pause Button
- * - Compact Time Display Text
- * - Optimized Touch Targets
+ * VideoPlayer — Final Production Version
+ * * DESIGN SPECS:
+ * - Mobile Button: 40px (w-10) | Desktop Button: 56px (w-14)
+ * - Mobile Text: 9px | Desktop Text: 12px
+ * - Progress Bar: Dual-layer visual with 32px invisible touch target
+ * - Gestures: Floating icons with drop-shadow (no background containers)
  */
 export default function VideoPlayer({ video, onPlayed }) {
   // --- STATE ---
@@ -39,7 +40,7 @@ export default function VideoPlayer({ video, onPlayed }) {
   const { id: videoId, source_type, public_url, file_url, external_url, thumbnail_url } = video || {};
   const src = source_type === "uploaded" ? public_url || file_url || "" : external_url || "";
 
-  // --- INIT ---
+  // --- INITIALIZATION ---
   useEffect(() => {
     setReported(false);
     setIsPlaying(false);
@@ -51,17 +52,21 @@ export default function VideoPlayer({ video, onPlayed }) {
   }, [videoId]);
 
   // --- CONTROLS ---
-  const togglePlay = useCallback(async (e) => {
+  const togglePlay = useCallback(async () => {
     const el = videoRef.current;
     if (!el) return;
-    try { if (el.paused) await el.play(); else el.pause(); } catch (err) {}
+    try { 
+        if (el.paused || el.ended) await el.play(); 
+        else el.pause(); 
+    } catch (err) { console.warn("Playback error:", err); }
   }, []);
 
-  // --- KEYBOARD ---
+  // --- KEYBOARD LISTENER ---
   useEffect(() => {
     const handleKeyDown = (e) => {
         const active = document.activeElement;
         if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+        
         if (e.code === "Space") {
             e.preventDefault(); 
             togglePlay();
@@ -75,11 +80,12 @@ export default function VideoPlayer({ video, onPlayed }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [togglePlay]);
 
-  // --- UI TOGGLE ---
+  // --- UI VISIBILITY ---
   const showUI = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    if (isPlaying && !skippingMode) {
+    // Only auto-hide if playing and not currently scrubbing/holding
+    if (isPlaying && !skippingMode && !isHoldingRef.current) {
         controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
     }
   }, [isPlaying, skippingMode]);
@@ -104,6 +110,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     const handleFsChange = () => {
         const isFs = !!document.fullscreenElement;
         setIsFullscreen(isFs);
+        // Attempt orientation lock on mobile
         if (isFs && window.screen?.orientation?.lock) window.screen.orientation.lock("landscape").catch(() => {});
         else if (!isFs && window.screen?.orientation?.unlock) window.screen.orientation.unlock();
     };
@@ -111,7 +118,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
 
-  // --- VIDEO LOGIC ---
+  // --- VIDEO EVENTS ---
   const handleTimeUpdate = () => {
     const el = videoRef.current;
     if (el && !Number.isNaN(el.duration)) {
@@ -166,7 +173,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     return () => events.forEach(([ev, handler]) => el.removeEventListener(ev, handler));
   }, [handlePlayEvent, handlePauseEvent, handleWaiting, handleCanPlay, handleEndedEvent]);
 
-  // --- GESTURES ---
+  // --- GESTURE LOGIC ---
   const startHoldAction = (direction) => {
     const el = videoRef.current;
     if (!el) return;
@@ -177,10 +184,10 @@ export default function VideoPlayer({ video, onPlayed }) {
     setShowControls(false);
 
     if (direction === 'forward') {
-        el.playbackRate = 3.0; 
+        el.playbackRate = 3.0; // Speed up
         if (el.paused) el.play();
     } else {
-        el.muted = true; 
+        el.muted = true; // Silence rewind
         el.playbackRate = 1.0;
         el.pause();
         const smoothRewind = () => {
@@ -195,10 +202,12 @@ export default function VideoPlayer({ video, onPlayed }) {
     const el = videoRef.current;
     if (!el) return;
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    
     el.playbackRate = 1.0;
-    el.currentTime = el.currentTime; // Resync
+    el.currentTime = el.currentTime; // Resync audio
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
+
     setTimeout(() => { if (el) el.muted = wasMutedRef.current; }, 50);
     setSkippingMode(null);
     showUI(); 
@@ -209,6 +218,8 @@ export default function VideoPlayer({ video, onPlayed }) {
   const handleInteractionEnd = (direction) => {
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     if (isHoldingRef.current) { endHoldAction(); return; }
+    
+    // Tap Logic
     const now = Date.now();
     if (now - lastTapTimeRef.current < 300) {
         const el = videoRef.current;
@@ -253,14 +264,14 @@ export default function VideoPlayer({ video, onPlayed }) {
         poster={thumbnail_url || undefined}
       />
 
-      {/* --- BUFFERING --- */}
+      {/* --- LAYER 4: BUFFERING --- */}
       {isBuffering && (
         <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none bg-black/10 backdrop-blur-[1px]">
             <div className="w-10 h-10 md:w-14 md:h-14 border-4 border-white/20 border-t-emerald-500 rounded-full animate-spin drop-shadow-xl"></div>
         </div>
       )}
 
-      {/* --- GESTURE ZONES --- */}
+      {/* --- LAYER 1: GESTURE ZONES --- */}
       <div 
         className="absolute top-0 left-0 bottom-16 w-[30%] z-10 cursor-pointer touch-manipulation"
         onMouseDown={() => handleInteractionStart('rewind')}
@@ -311,29 +322,29 @@ export default function VideoPlayer({ video, onPlayed }) {
         )}
       </div>
 
-      {/* --- CENTER PLAY BUTTON (Reduced Size) --- */}
+      {/* --- LAYER 3: CENTER PLAY BUTTON --- */}
+      {/* Optimized: Smaller, centered, high z-index to catch clicks */}
       {!skippingMode && !isBuffering && (showControls || !isPlaying) && (
         <div 
             onClick={(e) => {
                 e.stopPropagation();
                 togglePlay();
             }}
-            // Mobile: w-10 h-10 (40px) | Desktop: w-14 h-14 (56px) - Subtle & Sleek
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-14 md:h-14 flex items-center justify-center rounded-full bg-emerald-500/90 backdrop-blur-sm text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer hover:scale-110 hover:bg-emerald-400 transition-all active:scale-95"
         >
             {isPlaying ? (
                 <svg className="w-5 h-5 md:w-7 md:h-7 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
             ) : (
-                <svg className="w-5 h-5 md:w-7 md:h-7 fill-current ml-1" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                <svg className="w-5 h-5 md:w-7 md:h-7 fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             )}
         </div>
       )}
 
-      {/* --- BOTTOM CONTROLS --- */}
-      <div className={`absolute bottom-0 left-0 right-0 z-20 px-3 md:px-4 pb-3 pt-16 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      {/* --- LAYER 2: BOTTOM CONTROLS --- */}
+      <div className={`absolute bottom-0 left-0 right-0 z-20 px-2 md:px-4 pb-3 pt-12 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="flex items-center gap-2 md:gap-4 font-bold text-white mb-1">
             
-            {/* Play Button (Bar) */}
+            {/* Small Play Toggle */}
             <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="hover:text-emerald-400 transition-colors p-1.5 rounded-full hover:bg-white/10">
                 {isPlaying ? (
                     <svg className="w-5 h-5 md:w-6 md:h-6 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
@@ -342,20 +353,25 @@ export default function VideoPlayer({ video, onPlayed }) {
                 )}
             </button>
             
-            {/* Time Current (Reduced Size) */}
-            <span className="min-w-[28px] md:min-w-[36px] text-center font-mono tabular-nums tracking-tighter text-[9px] md:text-xs opacity-90">{formatTime(currentTime)}</span>
+            {/* Time Current */}
+            <span className="min-w-[30px] md:min-w-[40px] text-center font-mono tabular-nums tracking-tighter text-[9px] md:text-xs opacity-90">{formatTime(currentTime)}</span>
             
-            {/* PROGRESS BAR */}
+            {/* PROGRESS BAR (Dual Layer) */}
             <div className="flex-1 h-1 md:h-1.5 relative rounded-full cursor-pointer group flex items-center">
+                {/* Visual Track */}
                 <div className="absolute inset-0 bg-white/20 rounded-full backdrop-blur-sm"></div>
+                {/* Visual Fill */}
                 <div 
                     className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-75 ease-linear" 
                     style={{ width: `${progress}%` }}
                 ></div>
+                {/* Visual Thumb */}
                 <div 
                     className="absolute h-3 w-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
                     style={{ left: `${progress}%`, transform: 'translateX(-50%)' }}
                 ></div>
+                
+                {/* Input: Invisible but Large Hit Area (32px) */}
                 <input 
                     type="range" min="0" max="100" step="0.1"
                     value={progress} 
@@ -365,10 +381,10 @@ export default function VideoPlayer({ video, onPlayed }) {
                 />
             </div>
 
-            {/* Time Duration (Reduced Size) */}
-            <span className="min-w-[28px] md:min-w-[36px] text-center font-mono tabular-nums tracking-tighter text-[9px] md:text-xs text-slate-400">{formatTime(duration)}</span>
+            {/* Time Duration */}
+            <span className="min-w-[30px] md:min-w-[40px] text-center font-mono tabular-nums tracking-tighter text-[9px] md:text-xs text-slate-400">{formatTime(duration)}</span>
             
-            {/* Fullscreen Button */}
+            {/* Fullscreen Toggle */}
             <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="hover:text-emerald-400 transition-colors p-1.5 rounded-full hover:bg-white/10">
                 {isFullscreen ? (
                     <svg className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
