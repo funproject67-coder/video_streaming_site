@@ -2,12 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * VideoPlayer — Clean Cinematic Engine
- * Features: 
- * 1. OPTIMIZED: Progress Bar for Mobile Portrait (Larger Hit Area, Tighter Layout)
- * 2. Space Bar to Play/Pause
- * 3. Transparent Floating Feedback
- * 4. Dual-Layer Colored Progress Bar
+ * VideoPlayer — Clean Cinematic Engine (Refined)
+ * * UPDATES:
+ * - Smaller Center Play/Pause Button
+ * - Compact Time Display Text
+ * - Optimized Touch Targets
  */
 export default function VideoPlayer({ video, onPlayed }) {
   // --- STATE ---
@@ -48,6 +47,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     setSkippingMode(null);
     setDoubleTapFeedback(null);
     setProgress(0);
+    setCurrentTime(0);
   }, [videoId]);
 
   // --- CONTROLS ---
@@ -57,7 +57,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     try { if (el.paused) await el.play(); else el.pause(); } catch (err) {}
   }, []);
 
-  // --- KEYBOARD LISTENER ---
+  // --- KEYBOARD ---
   useEffect(() => {
     const handleKeyDown = (e) => {
         const active = document.activeElement;
@@ -65,6 +65,10 @@ export default function VideoPlayer({ video, onPlayed }) {
         if (e.code === "Space") {
             e.preventDefault(); 
             togglePlay();
+        }
+        if (e.code === "KeyF") {
+            e.preventDefault();
+            toggleFullscreen();
         }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -110,20 +114,23 @@ export default function VideoPlayer({ video, onPlayed }) {
   // --- VIDEO LOGIC ---
   const handleTimeUpdate = () => {
     const el = videoRef.current;
-    if (el) {
+    if (el && !Number.isNaN(el.duration)) {
         setCurrentTime(el.currentTime);
-        setProgress((el.currentTime / el.duration) * 100 || 0);
+        setProgress((el.currentTime / el.duration) * 100);
     }
   };
 
   const handleLoadedMetadata = () => {
-    if (videoRef.current) setDuration(videoRef.current.duration);
+    if (videoRef.current) {
+        setDuration(videoRef.current.duration);
+        if (videoRef.current.readyState >= 3) setIsBuffering(false);
+    }
   };
 
   const handleSeek = (e) => {
     const val = Number(e.target.value);
     const el = videoRef.current;
-    if (el) {
+    if (el && !Number.isNaN(el.duration)) {
         const newTime = (val / 100) * el.duration;
         el.currentTime = newTime;
         setProgress(val);
@@ -148,24 +155,15 @@ export default function VideoPlayer({ video, onPlayed }) {
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return undefined;
-    el.addEventListener("play", handlePlayEvent);
-    el.addEventListener("playing", handlePlayEvent);
-    el.addEventListener("pause", handlePauseEvent);
-    el.addEventListener("waiting", handleWaiting);
-    el.addEventListener("canplay", handleCanPlay);
-    el.addEventListener("ended", handleEndedEvent);
-    el.addEventListener("timeupdate", handleTimeUpdate);
-    el.addEventListener("loadedmetadata", handleLoadedMetadata);
-    return () => {
-      el.removeEventListener("play", handlePlayEvent);
-      el.removeEventListener("playing", handlePlayEvent);
-      el.removeEventListener("pause", handlePauseEvent);
-      el.removeEventListener("waiting", handleWaiting);
-      el.removeEventListener("canplay", handleCanPlay);
-      el.removeEventListener("ended", handleEndedEvent);
-      el.removeEventListener("timeupdate", handleTimeUpdate);
-      el.removeEventListener("loadedmetadata", handleLoadedMetadata);
-    };
+    
+    const events = [
+        ['play', handlePlayEvent], ['playing', handlePlayEvent],
+        ['pause', handlePauseEvent], ['waiting', handleWaiting],
+        ['canplay', handleCanPlay], ['ended', handleEndedEvent],
+        ['timeupdate', handleTimeUpdate], ['loadedmetadata', handleLoadedMetadata]
+    ];
+    events.forEach(([ev, handler]) => el.addEventListener(ev, handler));
+    return () => events.forEach(([ev, handler]) => el.removeEventListener(ev, handler));
   }, [handlePlayEvent, handlePauseEvent, handleWaiting, handleCanPlay, handleEndedEvent]);
 
   // --- GESTURES ---
@@ -198,7 +196,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     if (!el) return;
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     el.playbackRate = 1.0;
-    el.currentTime = el.currentTime; 
+    el.currentTime = el.currentTime; // Resync
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
     setTimeout(() => { if (el) el.muted = wasMutedRef.current; }, 50);
@@ -239,7 +237,7 @@ export default function VideoPlayer({ video, onPlayed }) {
     <div 
         ref={containerRef}
         className={`
-            relative w-full aspect-video bg-black group select-none outline-none overflow-hidden
+            relative w-full aspect-video bg-black group select-none outline-none overflow-hidden isolate
             ${isFullscreen ? 'fixed inset-0 z-50 rounded-none' : 'rounded-2xl md:rounded-[2.5rem] shadow-2xl ring-1 ring-white/10'}
         `}
         onMouseMove={showUI}
@@ -257,14 +255,14 @@ export default function VideoPlayer({ video, onPlayed }) {
 
       {/* --- BUFFERING --- */}
       {isBuffering && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
-            <div className="w-12 h-12 border-4 border-white/20 border-t-emerald-500 rounded-full animate-spin drop-shadow-md"></div>
+        <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none bg-black/10 backdrop-blur-[1px]">
+            <div className="w-10 h-10 md:w-14 md:h-14 border-4 border-white/20 border-t-emerald-500 rounded-full animate-spin drop-shadow-xl"></div>
         </div>
       )}
 
       {/* --- GESTURE ZONES --- */}
       <div 
-        className="absolute top-0 left-0 bottom-20 w-[30%] z-10 cursor-pointer touch-manipulation"
+        className="absolute top-0 left-0 bottom-16 w-[30%] z-10 cursor-pointer touch-manipulation"
         onMouseDown={() => handleInteractionStart('rewind')}
         onMouseUp={() => handleInteractionEnd('rewind')}
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
@@ -273,7 +271,7 @@ export default function VideoPlayer({ video, onPlayed }) {
       >
         {skippingMode === 'rewind' && (
             <div className="absolute inset-0 flex items-center justify-start pl-8 transition-all">
-                 <div className="flex flex-col items-center drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
+                 <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                     <span className="text-4xl text-emerald-400 animate-pulse">«</span>
                     <span className="text-[10px] font-black uppercase text-white mt-1">Rewind</span>
                  </div>
@@ -281,15 +279,15 @@ export default function VideoPlayer({ video, onPlayed }) {
         )}
         {doubleTapFeedback === 'rewind' && (
             <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
-                <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
-                    <span className="text-sm font-black text-white drop-shadow-md">-10s</span>
+                <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
+                    <span className="text-xs md:text-sm font-black text-white drop-shadow-md">-10s</span>
                 </div>
             </div>
         )}
       </div>
 
       <div 
-        className="absolute top-0 right-0 bottom-20 w-[30%] z-10 cursor-pointer"
+        className="absolute top-0 right-0 bottom-16 w-[30%] z-10 cursor-pointer touch-manipulation"
         onMouseDown={() => handleInteractionStart('forward')}
         onMouseUp={() => handleInteractionEnd('forward')}
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
@@ -298,44 +296,45 @@ export default function VideoPlayer({ video, onPlayed }) {
       >
         {skippingMode === 'forward' && (
             <div className="absolute inset-0 flex items-center justify-end pr-8 transition-all">
-                 <div className="flex flex-col items-center drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]">
+                 <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                     <span className="text-4xl text-emerald-400 animate-pulse">»</span>
-                    <span className="text-[10px] font-black uppercase text-white mt-1">3x</span>
+                    <span className="text-[10px] font-black uppercase text-white mt-1">3x Speed</span>
                  </div>
             </div>
         )}
         {doubleTapFeedback === 'forward' && (
             <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
-                <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
-                    <span className="text-sm font-black text-white drop-shadow-md">+10s</span>
+                <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
+                    <span className="text-xs md:text-sm font-black text-white drop-shadow-md">+10s</span>
                 </div>
             </div>
         )}
       </div>
 
-      {/* --- CENTER PLAY BUTTON --- */}
+      {/* --- CENTER PLAY BUTTON (Reduced Size) --- */}
       {!skippingMode && !isBuffering && (showControls || !isPlaying) && (
         <div 
             onClick={(e) => {
                 e.stopPropagation();
                 togglePlay();
             }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-12 h-12 md:w-16 md:h-16 flex items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_0_40px_rgba(16,185,129,0.6)] cursor-pointer hover:scale-110 hover:bg-emerald-400 transition-all active:scale-95"
+            // Mobile: w-10 h-10 (40px) | Desktop: w-14 h-14 (56px) - Subtle & Sleek
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-14 md:h-14 flex items-center justify-center rounded-full bg-emerald-500/90 backdrop-blur-sm text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer hover:scale-110 hover:bg-emerald-400 transition-all active:scale-95"
         >
             {isPlaying ? (
-                <svg className="w-6 h-6 md:w-8 md:h-8 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                <svg className="w-5 h-5 md:w-7 md:h-7 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
             ) : (
-                <svg className="w-6 h-6 md:w-8 md:h-8 fill-current ml-1" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                <svg className="w-5 h-5 md:w-7 md:h-7 fill-current ml-1" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             )}
         </div>
       )}
 
       {/* --- BOTTOM CONTROLS --- */}
-      {/* Optimized for Portrait: Reduced padding (px-2) and Gap (gap-2) to give progress bar more width */}
-      <div className={`absolute bottom-0 left-0 right-0 z-20 px-2 md:px-4 pb-3 pt-12 bg-gradient-to-t from-black/90 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <div className="flex items-center gap-2 md:gap-4 text-[10px] md:text-sm font-bold text-white mb-1">
+      <div className={`absolute bottom-0 left-0 right-0 z-20 px-3 md:px-4 pb-3 pt-16 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className="flex items-center gap-2 md:gap-4 font-bold text-white mb-1">
             
-            <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="hover:text-emerald-400 transition-colors p-1">
+            {/* Play Button (Bar) */}
+            <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="hover:text-emerald-400 transition-colors p-1.5 rounded-full hover:bg-white/10">
                 {isPlaying ? (
                     <svg className="w-5 h-5 md:w-6 md:h-6 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
                 ) : (
@@ -343,34 +342,34 @@ export default function VideoPlayer({ video, onPlayed }) {
                 )}
             </button>
             
-            <span className="min-w-[30px] md:min-w-[40px] text-center font-mono tabular-nums">{formatTime(currentTime)}</span>
+            {/* Time Current (Reduced Size) */}
+            <span className="min-w-[28px] md:min-w-[36px] text-center font-mono tabular-nums tracking-tighter text-[9px] md:text-xs opacity-90">{formatTime(currentTime)}</span>
             
-            {/* DUAL-LAYER PROGRESS BAR */}
+            {/* PROGRESS BAR */}
             <div className="flex-1 h-1 md:h-1.5 relative rounded-full cursor-pointer group flex items-center">
-                {/* Visuals */}
-                <div className="absolute inset-0 bg-white/20 rounded-full"></div>
+                <div className="absolute inset-0 bg-white/20 rounded-full backdrop-blur-sm"></div>
                 <div 
-                    className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-75" 
+                    className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-75 ease-linear" 
                     style={{ width: `${progress}%` }}
                 ></div>
                 <div 
                     className="absolute h-3 w-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
                     style={{ left: `${progress}%`, transform: 'translateX(-50%)' }}
                 ></div>
-                
-                {/* HIT AREA OPTIMIZATION: h-8 (32px) invisible input for easier touch */}
                 <input 
                     type="range" min="0" max="100" step="0.1"
                     value={progress} 
                     onChange={handleSeek}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute -top-3 bottom-0 w-full h-8 opacity-0 cursor-pointer z-30 touch-none"
+                    className="absolute -top-3 -bottom-3 w-full h-auto opacity-0 cursor-pointer z-30 touch-none"
                 />
             </div>
 
-            <span className="min-w-[30px] md:min-w-[40px] text-center font-mono tabular-nums">{formatTime(duration)}</span>
+            {/* Time Duration (Reduced Size) */}
+            <span className="min-w-[28px] md:min-w-[36px] text-center font-mono tabular-nums tracking-tighter text-[9px] md:text-xs text-slate-400">{formatTime(duration)}</span>
             
-            <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="hover:text-emerald-400 transition-colors p-1">
+            {/* Fullscreen Button */}
+            <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="hover:text-emerald-400 transition-colors p-1.5 rounded-full hover:bg-white/10">
                 {isFullscreen ? (
                     <svg className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
                 ) : (
