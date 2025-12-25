@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * VideoPlayer — Clean Cinematic Engine
  * Features: 
- * 1. Audio Enabled during Fast Forward (3x)
- * 2. Native Progress Bar (Scrubber) Enabled
- * 3. Double Tap to Seek +/- 10s
- * 4. Auto-Rotate Orientation on Fullscreen
+ * 1. Lag-Free Audio Resync on Speed Change
+ * 2. Audio Enabled during Fast Forward (3x)
+ * 3. Native Progress Bar (Scrubber) Enabled
+ * 4. Double Tap to Seek +/- 10s
+ * 5. Auto-Rotate Orientation on Fullscreen
  */
 export default function VideoPlayer({ video, onPlayed }) {
   const [reported, setReported] = useState(false);
@@ -53,11 +54,9 @@ export default function VideoPlayer({ video, onPlayed }) {
     if (!el) return;
 
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        // ENTER FULLSCREEN
         if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
         else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
     } else {
-        // EXIT FULLSCREEN
         if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
         else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
     }
@@ -67,24 +66,16 @@ export default function VideoPlayer({ video, onPlayed }) {
     const handleFsChange = () => {
         const isFs = !!document.fullscreenElement || !!document.webkitFullscreenElement;
         setIsFullscreen(isFs);
-
-        // --- AUTO-ROTATE LOGIC ---
         if (isFs) {
-            // Attempt to lock to landscape when entering fullscreen
             if (window.screen?.orientation?.lock) {
-                window.screen.orientation.lock("landscape").catch((err) => {
-                    // Silently fail on unsupported devices (like desktop or some iOS)
-                    console.debug("Orientation lock not supported or denied", err);
-                });
+                window.screen.orientation.lock("landscape").catch(() => {});
             }
         } else {
-            // Unlock orientation when exiting
             if (window.screen?.orientation?.unlock) {
                 window.screen.orientation.unlock();
             }
         }
     };
-
     document.addEventListener("fullscreenchange", handleFsChange);
     document.addEventListener("webkitfullscreenchange", handleFsChange);
     return () => {
@@ -169,7 +160,7 @@ export default function VideoPlayer({ video, onPlayed }) {
   }, [handleKeyboardAction]);
 
   // ==========================================
-  //  SMOOTH SKIP LOGIC
+  //  SMOOTH SKIP LOGIC (Lag-Free)
   // ==========================================
   
   const startHoldAction = (direction) => {
@@ -183,15 +174,12 @@ export default function VideoPlayer({ video, onPlayed }) {
     setSkippingMode(direction);
 
     if (direction === 'forward') {
-        // FORWARD (Audio On)
         el.playbackRate = 3.0; 
         if (el.paused) el.play();
     } else {
-        // REWIND (Muted)
-        el.muted = true;
+        el.muted = true; // Mute rewind
         el.playbackRate = 1.0;
         el.pause();
-        
         const smoothRewind = () => {
             el.currentTime = Math.max(0, el.currentTime - 0.06);
             if (el.currentTime > 0) animationRef.current = requestAnimationFrame(smoothRewind);
@@ -206,11 +194,21 @@ export default function VideoPlayer({ video, onPlayed }) {
 
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     
+    // 1. Reset Speed
     el.playbackRate = 1.0;
-    el.muted = wasMutedRef.current;
 
+    // 2. Micro-Seek (Forces engine to align Audio/Video timestamps)
+    // This prevents the "drift" or lag often heard after changing rates.
+    el.currentTime = el.currentTime;
+
+    // 3. Restore State with tiny delay for stability
     if (wasPlayingRef.current) el.play().catch(() => {});
     else el.pause();
+
+    // 4. Restore Audio (Wait 50ms for speed to stabilize)
+    setTimeout(() => {
+        if (el) el.muted = wasMutedRef.current;
+    }, 50);
 
     setSkippingMode(null);
     setTimeout(() => { isHoldingRef.current = false; }, 100);
@@ -256,7 +254,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         className="relative w-full aspect-video bg-black rounded-[2rem] overflow-hidden shadow-2xl group select-none outline-none fullscreen:rounded-none fullscreen:w-full fullscreen:h-full fullscreen:flex fullscreen:items-center fullscreen:justify-center"
     >
       
-      {/* Decorative Border Overlay (Hidden in Fullscreen) */}
+      {/* Decorative Border Overlay */}
       {!isFullscreen && <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/10 pointer-events-none z-50" />}
 
       <video
@@ -291,7 +289,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchStart={() => handleInteractionStart('rewind')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('rewind'); }}
       >
-        {/* Clean Feedback (Left) */}
+        {/* Floating Feedback (Left) */}
         <div className={`absolute inset-0 flex items-center justify-start pl-4 sm:pl-12 transition-opacity duration-300 ${skippingMode === 'rewind' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                 <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
@@ -319,7 +317,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         onTouchStart={() => handleInteractionStart('forward')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('forward'); }}
       >
-        {/* Clean Feedback (Right) */}
+        {/* Floating Feedback (Right) */}
         <div className={`absolute inset-0 flex items-center justify-end pr-4 sm:pr-12 transition-opacity duration-300 ${skippingMode === 'forward' ? 'opacity-100' : 'opacity-0'}`}>
              <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                 <div className="flex text-emerald-400 animate-pulse mb-1 sm:mb-2 scale-100 sm:scale-125">
