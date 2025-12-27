@@ -355,9 +355,15 @@ export default function ViewerPage(props) {
                             {selected.duration && <span className="px-2.5 py-1 rounded-lg bg-white/5 text-slate-400 text-[10px] font-black border border-white/5 uppercase tracking-widest">⏱️ {formatDuration(selected.duration)}</span>}
                         </div>
                         
-                        <p className="text-slate-400 leading-relaxed text-sm border-l-2 border-emerald-500/30 pl-4 py-1 whitespace-pre-line max-w-4xl">
-                            {selected.description}
-                        </p>
+                        {/* --- FIXED DESCRIPTION DESIGN (Boxed & Responsive) --- */}
+                        <div className="bg-white/5 p-4 md:p-6 rounded-2xl border border-white/5 hover:bg-white/[0.07] transition-colors">
+                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Description</h3>
+                            <p className="text-slate-300 leading-relaxed text-sm whitespace-pre-line">
+                                {selected.description || "No description available for this video."}
+                            </p>
+                        </div>
+                        {/* ---------------------------------------------------- */}
+
                     </div>
                 </div>
 
