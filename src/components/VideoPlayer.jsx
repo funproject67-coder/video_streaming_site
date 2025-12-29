@@ -6,12 +6,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * * UPDATES:
  * - Removed initial buffering state (Clean start)
  * - Video sits ready with thumbnail until interaction
+ * - Controls hide after 2s inactivity
  */
 export default function VideoPlayer({ video, onPlayed }) {
   // --- STATE ---
   const [reported, setReported] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false); // FIXED: Start as false
+  const [isBuffering, setIsBuffering] = useState(false); 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   
@@ -42,11 +43,12 @@ export default function VideoPlayer({ video, onPlayed }) {
   useEffect(() => {
     setReported(false);
     setIsPlaying(false);
-    setIsBuffering(false); // FIXED: Do not show spinner on load
+    setIsBuffering(false); 
     setSkippingMode(null);
     setDoubleTapFeedback(null);
     setProgress(0);
     setCurrentTime(0);
+    setShowControls(true); // Always show controls initially
   }, [videoId]);
 
   // --- CONTROLS ---
@@ -54,8 +56,13 @@ export default function VideoPlayer({ video, onPlayed }) {
     const el = videoRef.current;
     if (!el) return;
     try { 
-        if (el.paused || el.ended) await el.play(); 
-        else el.pause(); 
+        if (el.paused || el.ended) {
+            await el.play(); 
+            // Controls will auto-hide via showUI logic in play event
+        } else {
+            el.pause(); 
+            setShowControls(true); // Always show controls when paused
+        }
     } catch (err) { console.warn("Playback error:", err); }
   }, []);
 
@@ -68,28 +75,43 @@ export default function VideoPlayer({ video, onPlayed }) {
         if (e.code === "Space") {
             e.preventDefault(); 
             togglePlay();
+            showUI(); // Reset timer on interaction
         }
         if (e.code === "KeyF") {
             e.preventDefault();
             toggleFullscreen();
+            showUI(); // Reset timer on interaction
         }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlay]);
+  }, [togglePlay]); // Removed 'showUI' from deps to avoid re-binding loop
 
-  // --- UI VISIBILITY ---
+  // --- UI VISIBILITY (UPDATED) ---
   const showUI = useCallback(() => {
     setShowControls(true);
-    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    
+    // Clear existing timer
+    if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+    }
+
+    // Only set auto-hide timer if playing and not interacting
     if (isPlaying && !skippingMode && !isHoldingRef.current) {
-        controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
+        controlsTimeoutRef.current = setTimeout(() => {
+            setShowControls(false);
+        }, 2000); // Hide after 2 seconds
     }
   }, [isPlaying, skippingMode]);
 
+  // Force show controls when paused, otherwise toggle
   const toggleUI = useCallback(() => {
-    if (showControls && isPlaying) setShowControls(false);
-    else showUI();
+    if (!isPlaying) {
+        setShowControls(true);
+    } else {
+        if (showControls) setShowControls(false);
+        else showUI();
+    }
   }, [showControls, isPlaying, showUI]);
 
   // --- FULLSCREEN ---
@@ -136,7 +158,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         const newTime = (val / 100) * el.duration;
         el.currentTime = newTime;
         setProgress(val);
-        showUI();
+        showUI(); // Reset timer on interaction
     }
   };
 
@@ -147,9 +169,18 @@ export default function VideoPlayer({ video, onPlayed }) {
     }
     setIsPlaying(true);
     setIsBuffering(false);
+    // Trigger UI hide logic once playback starts
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 2000); 
   }, [reported, onPlayed, videoId]);
 
-  const handlePauseEvent = useCallback(() => { setIsPlaying(false); setIsBuffering(false); }, []);
+  const handlePauseEvent = useCallback(() => { 
+      setIsPlaying(false); 
+      setIsBuffering(false); 
+      setShowControls(true); // Always show when paused
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+  }, []);
+  
   const handleWaiting = useCallback(() => setIsBuffering(true), []);
   const handleCanPlay = useCallback(() => setIsBuffering(false), []);
   const handleEndedEvent = useCallback(() => { setIsPlaying(false); setSkippingMode(null); setShowControls(true); }, []);
@@ -223,6 +254,7 @@ export default function VideoPlayer({ video, onPlayed }) {
             el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + time));
             setDoubleTapFeedback(direction);
             setTimeout(() => setDoubleTapFeedback(null), 600);
+            showUI(); // Keep UI visible during interaction
         }
     } else {
         toggleUI();
@@ -248,6 +280,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         `}
         onMouseMove={showUI}
         onMouseLeave={() => isPlaying && setShowControls(false)}
+        onClick={toggleUI} // Allow clicking anywhere to toggle UI
     >
       <video
         ref={videoRef}
@@ -257,6 +290,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         className={`w-full h-full block bg-black ${isFullscreen ? 'object-contain' : 'object-cover'}`}
         src={src}
         poster={thumbnail_url || undefined}
+        onClick={(e) => e.stopPropagation()} // Let container handle clicks
       />
 
       {/* --- LAYER 4: BUFFERING --- */}
@@ -266,7 +300,7 @@ export default function VideoPlayer({ video, onPlayed }) {
         </div>
       )}
 
-      {/* --- LAYER 1: GESTURE ZONES --- */}
+      {/* --- LAYER 1: GESTURE ZONES (Invisible) --- */}
       <div 
         className="absolute top-0 left-0 bottom-16 w-[30%] z-10 cursor-pointer touch-manipulation"
         onMouseDown={() => handleInteractionStart('rewind')}
@@ -274,9 +308,10 @@ export default function VideoPlayer({ video, onPlayed }) {
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
         onTouchStart={() => handleInteractionStart('rewind')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('rewind'); }}
+        onClick={(e) => e.stopPropagation()} 
       >
         {skippingMode === 'rewind' && (
-            <div className="absolute inset-0 flex items-center justify-start pl-8 transition-all">
+            <div className="absolute inset-0 flex items-center justify-start pl-8 transition-all pointer-events-none">
                  <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                     <span className="text-4xl text-emerald-400 animate-pulse">«</span>
                     <span className="text-[10px] font-black uppercase text-white mt-1">Rewind</span>
@@ -284,7 +319,7 @@ export default function VideoPlayer({ video, onPlayed }) {
             </div>
         )}
         {doubleTapFeedback === 'rewind' && (
-            <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
+            <div className="absolute inset-0 flex items-center justify-center animate-ping-short pointer-events-none">
                 <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
                     <span className="text-xs md:text-sm font-black text-white drop-shadow-md">-10s</span>
                 </div>
@@ -299,9 +334,10 @@ export default function VideoPlayer({ video, onPlayed }) {
         onMouseLeave={() => { clearTimeout(holdTimerRef.current); if(isHoldingRef.current) endHoldAction(); }}
         onTouchStart={() => handleInteractionStart('forward')}
         onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd('forward'); }}
+        onClick={(e) => e.stopPropagation()}
       >
         {skippingMode === 'forward' && (
-            <div className="absolute inset-0 flex items-center justify-end pr-8 transition-all">
+            <div className="absolute inset-0 flex items-center justify-end pr-8 transition-all pointer-events-none">
                  <div className="flex flex-col items-center drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]">
                     <span className="text-4xl text-emerald-400 animate-pulse">»</span>
                     <span className="text-[10px] font-black uppercase text-white mt-1">3x Speed</span>
@@ -309,7 +345,7 @@ export default function VideoPlayer({ video, onPlayed }) {
             </div>
         )}
         {doubleTapFeedback === 'forward' && (
-            <div className="absolute inset-0 flex items-center justify-center animate-ping-short">
+            <div className="absolute inset-0 flex items-center justify-center animate-ping-short pointer-events-none">
                 <div className="w-14 h-14 md:w-20 md:h-20 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xl">
                     <span className="text-xs md:text-sm font-black text-white drop-shadow-md">+10s</span>
                 </div>
@@ -318,24 +354,30 @@ export default function VideoPlayer({ video, onPlayed }) {
       </div>
 
       {/* --- LAYER 3: CENTER PLAY BUTTON --- */}
-      {!skippingMode && !isBuffering && (showControls || !isPlaying) && (
-        <div 
-            onClick={(e) => {
-                e.stopPropagation();
-                togglePlay();
-            }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-14 md:h-14 flex items-center justify-center rounded-full bg-emerald-500/90 backdrop-blur-sm text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer hover:scale-110 hover:bg-emerald-400 transition-all active:scale-95"
-        >
-            {isPlaying ? (
-                <svg className="w-5 h-5 md:w-7 md:h-7 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
-            ) : (
-                <svg className="w-5 h-5 md:w-7 md:h-7 fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-            )}
-        </div>
-      )}
+      {/* Wrapped with showControls check for visibility timeout */}
+      <div className={`absolute inset-0 flex items-center justify-center z-30 pointer-events-none transition-opacity duration-300 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0'}`}>
+        {!skippingMode && !isBuffering && (
+            <div 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    togglePlay();
+                }}
+                className="pointer-events-auto w-10 h-10 md:w-14 md:h-14 flex items-center justify-center rounded-full bg-emerald-500/90 backdrop-blur-sm text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer hover:scale-110 hover:bg-emerald-400 transition-all active:scale-95"
+            >
+                {isPlaying ? (
+                    <svg className="w-5 h-5 md:w-7 md:h-7 fill-current" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                ) : (
+                    <svg className="w-5 h-5 md:w-7 md:h-7 fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                )}
+            </div>
+        )}
+      </div>
 
       {/* --- LAYER 2: BOTTOM CONTROLS --- */}
-      <div className={`absolute bottom-0 left-0 right-0 z-20 px-2 md:px-4 pb-3 pt-12 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      <div 
+        className={`absolute bottom-0 left-0 right-0 z-20 px-2 md:px-4 pb-3 pt-12 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={(e) => e.stopPropagation()} // Prevent click-through to video toggle
+      >
         <div className="flex items-center gap-2 md:gap-4 font-bold text-white mb-1">
             
             {/* Small Play Toggle */}
@@ -371,6 +413,18 @@ export default function VideoPlayer({ video, onPlayed }) {
                     value={progress} 
                     onChange={handleSeek}
                     onClick={(e) => e.stopPropagation()}
+                    onMouseDown={() => {
+                        // Clear timeout while dragging slider
+                        if(controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+                    }}
+                    onMouseUp={() => {
+                        // Restart timeout after dragging
+                        showUI();
+                    }}
+                    onTouchStart={() => {
+                        if(controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+                    }}
+                    onTouchEnd={() => showUI()}
                     className="absolute -top-3 -bottom-3 w-full h-auto opacity-0 cursor-pointer z-30 touch-none"
                 />
             </div>
