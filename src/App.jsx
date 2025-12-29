@@ -116,13 +116,9 @@ const AuthModal = ({ onClose, disableSignup, onVerifying }) => {
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) throw authError;
 
-      const isUserBlocked = await checkIfBlocked(data.user.id);
-      if (isUserBlocked) {
-        await supabase.auth.signOut();
-        setError("ACCESS DENIED: Your account has been suspended.");
-        if (onVerifying) onVerifying(false); 
-        return; 
-      }
+      // Note: We intentionally allow the main App listener to handle the block check
+      // to avoid double-logic here. The App listener will catch the SIGNED_IN event
+      // and immediately show the BlockedOverlay if needed.
 
       if (onVerifying) onVerifying(false);
       onClose();
@@ -224,7 +220,7 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
-    // Safety Timeout
+    // Safety Timeout for Loading
     const safetyTimer = setTimeout(() => {
         if (mounted && !authReady) {
             console.warn("Auth check timed out, forcing UI load.");
@@ -237,10 +233,12 @@ export default function App() {
             const { data } = await supabase.auth.getSession();
             if (mounted && data?.session) {
                 setSession(data.session);
+                
                 const isUserAdmin = data.session.user.user_metadata?.role === "admin";
                 setIsAdmin(isUserAdmin);
                 if (isUserAdmin) localStorage.setItem("studio_admin_active", "true");
                 
+                // Initial Block Check
                 checkIfBlocked(data.session.user.id).then(blocked => {
                     if (mounted && blocked) setBlockedMessage("Your account has been suspended.");
                 });
@@ -267,13 +265,18 @@ export default function App() {
               if(localStorage.getItem("studio_admin_active") !== "true") setIsAdmin(false);
           }
 
+          // Check block status (Logged in)
           checkIfBlocked(s.user.id).then(blocked => {
               if (mounted && blocked) setBlockedMessage("Your account has been suspended.");
               else if (mounted) setBlockedMessage(null);
           });
       } else {
+          // Logged Out
           if (localStorage.getItem("studio_admin_active") !== "true") setIsAdmin(false);
-          if (mounted) setBlockedMessage(null); 
+          
+          // FIX: Do NOT clear blockedMessage here.
+          // If a block caused the logout, we want the message to persist.
+          // The overlay's button handles the full reset via page reload.
       }
       setAuthReady(true);
     });
@@ -284,6 +287,29 @@ export default function App() {
         sub.subscription.unsubscribe();
     };
   }, []);
+
+  // --- REALTIME BLOCK LISTENER ---
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const channel = supabase
+      .channel(`public:profiles:${session.user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` },
+        (payload) => {
+          if (payload.new.is_blocked) {
+            setBlockedMessage("Your account has been suspended.");
+            supabase.auth.signOut(); // Triggers onAuthStateChange, but we keep the msg now
+          } else {
+            setBlockedMessage(null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [session?.user?.id]);
 
   const handleForceLogout = async () => {
       setBlockedMessage(null);
@@ -314,17 +340,17 @@ export default function App() {
 
   useEffect(() => { fetchVideos(); }, [fetchVideos]);
 
-  // Sync selected video if data updates
+  // Sync selected video if data updates (Silent update)
   useEffect(() => {
     if (selected && videos.length > 0) {
       const updated = videos.find(v => v.id === selected.id);
-      if (updated && updated !== selected) {
-        setSelected(updated);
-      }
+      if (updated && updated !== selected) setSelected(updated);
     }
   }, [videos, selected]);
 
   /* --- 3. THUMBNAIL OPERATIONS --- */
+  // NOTE: These operations trigger fetchVideos() which updates 'videos' state.
+  // The useEffect above then silently updates 'selected', preventing UI flash/msg loss.
   const onUpdateThumbnail = async (video, second = 7) => {
     try {
       const videoUrl = video.public_url || video.external_url;
@@ -458,7 +484,7 @@ export default function App() {
   const showModal = showAuthModal || isGated || isVerifyingState;
 
   // Nav Item Helper
-  const NavItem = ({ to, label, icon: Icon, activePath }) => {
+  const NavItem = ({ to, label, icon: Icon }) => {
     const active = location.pathname === to || (to !== "/" && location.pathname.startsWith(to));
     return (
       <Link to={to} className={`flex items-center gap-2 px-4 py-1.5 rounded-lg transition-all ${active ? 'bg-emerald-500 text-slate-950 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
