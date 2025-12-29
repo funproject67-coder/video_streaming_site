@@ -1,8 +1,9 @@
+/* eslint-disable no-irregular-whitespace */
 import React, { useCallback, useEffect, useState, memo } from "react";
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
-import { motion, AnimatePresence } from "framer-motion";
-import { LogOut } from "lucide-react";
+import { motion } from "framer-motion";
+import { LogOut, ShieldAlert, Lock } from "lucide-react";
 
 import ViewerPage from "./components/ViewerPage";
 import AdminPage from "./components/AdminPage";
@@ -13,355 +14,407 @@ import {
   getPublicUrlForThumbPath,
 } from "./utils/thumbnails";
 
-const VIDEO_BUCKET = "videos";
+/* -------------------------------------------------------
+   HELPERS
+------------------------------------------------------- */
+const checkIfBlocked = async (userId) => {
+  if (!userId) return false;
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("is_blocked")
+      .eq("id", userId)
+      .single();
+    return data?.is_blocked === true;
+  } catch {
+    return false;
+  }
+};
 
 /* -------------------------------------------------------
-    INITIAL SPLASH SCREEN
+   UI COMPONENTS
 ------------------------------------------------------- */
 const InitialLoader = memo(() => (
   <motion.div
     initial={{ opacity: 1 }}
-    exit={{ opacity: 0, scale: 1.05, filter: "blur(15px)" }}
-    transition={{ duration: 0.8 }}
-    className="fixed inset-0 z-[100] bg-[#020617] flex flex-col items-center justify-center pointer-events-none"
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.6 }}
+    className="fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]"
   >
-    <div className="w-24 h-24 bg-[#0B1120] border border-white/10 rounded-3xl flex items-center justify-center shadow-2xl">
-      <span className="text-5xl font-black text-white">S</span>
-    </div>
-    <div className="mt-8 text-white font-black tracking-[0.5em] uppercase text-[10px] animate-pulse">
-      Stream Studio
+    <div className="text-white font-black tracking-[0.45em] text-lg">
+      STREAM STUDIO
     </div>
   </motion.div>
 ));
 
-/* -------------------------------------------------------
-    AUTH MODAL
-------------------------------------------------------- */
-const AuthModal = ({ onClose, initialMode = "signin" }) => {
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    fullName: "",
-    mode: initialMode,
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+const BlockedOverlay = ({ message }) => (
+  <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-xl">
+    <div className="max-w-md rounded-3xl border border-rose-500/20 bg-slate-900/70 p-8 text-center shadow-2xl">
+      <ShieldAlert className="mx-auto mb-5 text-rose-500" size={48} />
+      <h2 className="mb-3 text-xl font-black uppercase tracking-widest text-rose-400">
+        Access Restricted
+      </h2>
+      <p className="text-sm leading-relaxed text-slate-300">{message}</p>
+    </div>
+  </div>
+);
 
-  const handleSubmit = async (e) => {
+/* -------------------------------------------------------
+   AUTH MODAL
+------------------------------------------------------- */
+const AuthModal = ({ onClose, disableSignup }) => {
+  const [name, setName] = useState("");       // ✅ FIXED
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState("signin");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setError("");
 
     try {
-      if (formData.mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-          options: { data: { full_name: formData.fullName, role: "user" } },
+      if (mode === "signup") {
+        if (disableSignup) throw new Error("Signup disabled");
+
+        await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: name,
+            },
+          },
         });
-        if (error) throw error;
-        alert("Account created! Please sign in.");
-        setFormData((p) => ({ ...p, mode: "signin" }));
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.password,
-        });
-        if (error) throw error;
-        onClose();
+
+        setMode("signin");
+        setName("");
+        alert("Account created. Please login.");
+        return;
       }
-    } catch (err) {
-      setError(err.message);
+
+      const { data, error: authError } =
+        await supabase.auth.signInWithPassword({ email, password });
+
+      if (authError) throw authError;
+
+      const blocked = await checkIfBlocked(data.user.id);
+      if (blocked) {
+        await supabase.auth.signOut();
+        setError("Blocked by admin");
+        return;
+      }
+
+      onClose();
+    } catch (e) {
+      setError(e.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-[#0B1120] border border-white/10 rounded-3xl p-8 relative shadow-2xl">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-slate-500 hover:text-white"
-        >
-          ✕
-        </button>
-
-        <h2 className="text-2xl font-black text-white uppercase text-center mb-6">
-          {formData.mode === "signin" ? "Welcome Back" : "Join Studio"}
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl">
+      <motion.form
+        onSubmit={submit}
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="w-80 space-y-4 rounded-2xl border border-white/10 bg-slate-900/80 p-6 shadow-2xl"
+      >
+        <h2 className="text-center text-lg font-black tracking-widest text-white">
+          {mode === "signin" ? "SIGN IN" : "SIGN UP"}
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {formData.mode === "signup" && (
-            <input
-              value={formData.fullName}
-              onChange={(e) =>
-                setFormData({ ...formData, fullName: e.target.value })
-              }
-              placeholder="Display Name"
-              className="w-full p-4 rounded-xl bg-slate-900 border border-white/10 text-white"
-              required
-            />
-          )}
-
+        {mode === "signup" && (
           <input
-            type="email"
-            value={formData.email}
-            onChange={(e) =>
-              setFormData({ ...formData, email: e.target.value })
-            }
-            placeholder="Email"
-            className="w-full p-4 rounded-xl bg-slate-900 border border-white/10 text-white"
+            className="w-full rounded-lg border border-white/10 bg-black/40 p-2 text-sm text-white outline-none focus:border-emerald-500/50"
+            placeholder="Full Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             required
           />
+        )}
 
-          <input
-            type="password"
-            value={formData.password}
-            onChange={(e) =>
-              setFormData({ ...formData, password: e.target.value })
-            }
-            placeholder="Password"
-            className="w-full p-4 rounded-xl bg-slate-900 border border-white/10 text-white"
-            required
-          />
+        <input
+          className="w-full rounded-lg border border-white/10 bg-black/40 p-2 text-sm text-white outline-none focus:border-emerald-500/50"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-          {error && (
-            <div className="text-rose-400 text-xs font-bold text-center">
-              {error}
-            </div>
-          )}
+        <input
+          className="w-full rounded-lg border border-white/10 bg-black/40 p-2 text-sm text-white outline-none focus:border-emerald-500/50"
+          placeholder="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
+        {error && <div className="text-xs text-rose-400">{error}</div>}
+
+        <button className="w-full rounded-lg bg-emerald-500 py-2 text-sm font-black uppercase tracking-widest text-slate-950 hover:bg-emerald-400">
+          {loading ? "..." : "Submit"}
+        </button>
+
+        {!disableSignup && (
           <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-widest"
+            type="button"
+            className="w-full text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-white"
+            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
           >
-            {loading ? "..." : formData.mode === "signin" ? "Login" : "Register"}
+            {mode === "signin" ? "Create account" : "Back to login"}
           </button>
-        </form>
-      </div>
+        )}
+      </motion.form>
     </div>
   );
 };
 
 /* -------------------------------------------------------
-    MAIN APP
+   MAIN APP
 ------------------------------------------------------- */
 export default function App() {
   const [videos, setVideos] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [initialLoad, setInitialLoad] = useState(true);
   const [fetchError, setFetchError] = useState(null);
 
   const [session, setSession] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState(null);
+
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [selected, setSelected] = useState(null);
+  const [accessMode, setAccessMode] = useState("open");
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
 
   const location = useLocation();
 
-  /* -------- AUTH SYNC -------- */
+  /* ---------- AUTH ---------- */
   useEffect(() => {
-    const syncAuth = async () => {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session);
-      setIsAdmin(data.session?.user?.user_metadata?.role === "admin");
-    };
-
-    syncAuth();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(
-      (_evt, session) => {
-        setSession(session);
-        setIsAdmin(session?.user?.user_metadata?.role === "admin");
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        setSession(data.session);
+        setIsAdmin(data.session.user.user_metadata?.role === "admin");
       }
-    );
+      setAuthReady(true);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      setIsAdmin(s?.user?.user_metadata?.role === "admin");
+    });
 
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  /* -------- FETCH VIDEOS -------- */
-  const fetchVideos = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  /* ---------- REALTIME BLOCK ---------- */
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const ch = supabase
+      .channel(`block-${session.user.id}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        table: "profiles",
+        filter: `id=eq.${session.user.id}`,
+      }, async (p) => {
+        if (p.new.is_blocked) {
+          await supabase.auth.signOut();
+          setBlockedMessage("Blocked by administrator");
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [session?.user?.id]);
+
+  /* ---------- SITE MODE ---------- */
+  useEffect(() => {
+    supabase
+      .from("site_settings")
+      .select("setting_value")
+      .eq("setting_name", "access_mode")
+      .maybeSingle()
+      .then(({ data }) => data && setAccessMode(data.setting_value));
+  }, []);
+
+  /* ---------- VIDEOS ---------- */
+  const fetchVideos = useCallback(async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("videos")
         .select("*")
-        .order("order_index", { ascending: true });
-
-      if (error) throw error;
-
-      const processed = (data || []).map((v) => ({
-        ...v,
-        public_url: v.file_path
-          ? getPublicUrlForVideoPath(v.file_path)
-          : v.external_url || "",
-        thumbnail_url: v.thumbnail_path
-          ? getPublicUrlForThumbPath(v.thumbnail_path)
+        .order("order_index");
+      const v = (data || []).map((x) => ({
+        ...x,
+        public_url: x.file_path
+          ? getPublicUrlForVideoPath(x.file_path)
+          : x.external_url,
+        thumbnail_url: x.thumbnail_path
+          ? getPublicUrlForThumbPath(x.thumbnail_path)
           : null,
       }));
-
-      setVideos(processed);
-      if (!selected && processed.length > 0) setSelected(processed[0]);
-    } catch (err) {
-      setFetchError(err.message);
+      setVideos(v);
+      if (!selected && v.length) setSelected(v[0]);
+    } catch (e) {
+      setFetchError(e.message);
     } finally {
       setLoading(false);
-      setInitialLoad(false);
     }
   }, [selected]);
 
   useEffect(() => {
     fetchVideos();
-    const channel = supabase
-      .channel("videos-sync")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "videos" },
-        () => fetchVideos(true)
-      )
+    const ch = supabase
+      .channel("videos")
+      .on("postgres_changes", { event: "*", table: "videos" }, fetchVideos)
       .subscribe();
-
-    return () => supabase.removeChannel(channel);
+    return () => supabase.removeChannel(ch);
   }, [fetchVideos]);
 
+  /* ---------- ADMIN CALLBACKS ---------- */
+  const onUpdateVideo = (id, payload) =>
+    supabase.from("videos").update(payload).eq("id", id);
+  const onTogglePublic = (v) =>
+    supabase.from("videos").update({ is_public: !v.is_public }).eq("id", v.id);
+  const onToggleFeatured = (v) =>
+    supabase.from("videos")
+      .update({ is_featured: !v.is_featured })
+      .eq("id", v.id);
+  const onDeleteVideo = (v) =>
+    supabase.from("videos").delete().eq("id", v.id);
+  const onReorder = (p) => supabase.from("videos").upsert(p);
+
+  if (blockedMessage) return <BlockedOverlay message={blockedMessage} />;
+
+  const gated =
+    authReady &&
+    (accessMode === "login" || accessMode === "invite") &&
+    !session &&
+    !location.pathname.startsWith("/admin");
+
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 pt-16">
-      <AnimatePresence>{initialLoad && <InitialLoader />}</AnimatePresence>
-      <AnimatePresence>
-        {showAuthModal && (
-          <AuthModal onClose={() => setShowAuthModal(false)} />
-        )}
-      </AnimatePresence>
+    <div className="min-h-screen bg-[#020617] text-white">
+      {!authReady && <InitialLoader />}
 
-      {/* HEADER */}
-      <header className="fixed top-0 left-0 right-0 z-[60] h-16 px-4 md:px-8 flex items-center justify-between bg-[#020617]/80 backdrop-blur-xl border-b border-white/5">
-        <div className="flex items-center gap-4">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 font-black">
-            S
-          </div>
-        </div>
-
-        <nav className="flex items-center bg-white/5 rounded-full p-1 border border-white/5">
-          <Link
-            to="/"
-            className={`px-4 py-1 text-[10px] font-bold uppercase ${
-              location.pathname === "/"
-                ? "bg-emerald-500 text-slate-950 rounded-full"
-                : "text-slate-400"
-            }`}
-          >
-            Video
-          </Link>
-
-          <Link
-            to="/forum"
-            className={`px-4 py-1 text-[10px] font-bold uppercase ${
-              location.pathname.startsWith("/forum")
-                ? "bg-emerald-500 text-slate-950 rounded-full"
-                : "text-slate-400"
-            }`}
-          >
-            Forum
-          </Link>
-
-          {isAdmin && (
-            <Link
-              to="/admin"
-              className={`px-4 py-1 text-[10px] font-bold uppercase ${
-                location.pathname.startsWith("/admin")
-                  ? "bg-emerald-500 text-slate-950 rounded-full"
-                  : "text-slate-400"
-              }`}
-            >
-              Console
-            </Link>
+      {authReady && (
+        <>
+          {(gated || showAuthModal) && (
+            <AuthModal
+              onClose={() => setShowAuthModal(false)}
+              disableSignup={accessMode === "invite"}
+            />
           )}
-        </nav>
 
-        {session ? (
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="p-2 text-slate-400 hover:text-rose-500"
-          >
-            <LogOut size={18} />
-          </button>
-        ) : (
-          <button
-            onClick={() => setShowAuthModal(true)}
-            className="px-4 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase"
-          >
-            Sign In
-          </button>
-        )}
-      </header>
+          <header className="fixed top-0 inset-x-0 z-50 h-16 border-b border-white/5 bg-[#020617]/70 backdrop-blur-xl">
+            <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
+              <Link to="/" className="font-black tracking-widest">STREAM</Link>
 
-      {/* ROUTES */}
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <ViewerPage
-              videos={videos.filter((v) => v.is_public !== false)}
-              loading={loading}
-              fetchError={fetchError}
-              search={search}
-              setSearch={setSearch}
-              filterType={filterType}
-              setFilterType={setFilterType}
-              session={session}
-              onOpenAuth={() => setShowAuthModal(true)}
-              onVideoPlayed={(id) =>
-                supabase.rpc("increment_view_count", { video_id: id })
-              }
-            />
-          }
-        />
+              <nav className="flex gap-4 text-xs font-bold uppercase tracking-widest text-slate-400">
+                <Link to="/" className="hover:text-white">Video</Link>
+                <Link to="/forum" className="hover:text-white">Forum</Link>
+                {isAdmin && <Link to="/admin" className="hover:text-white">Console</Link>}
+              </nav>
 
-        <Route
-          path="/forum"
-          element={
-            <ForumPage
-              isAdminAuthed={isAdmin}
-              session={session}
-              onOpenAuth={() => setShowAuthModal(true)}
-            />
-          }
-        />
-        <Route
-          path="/forum/:threadId"
-          element={
-            <ForumPage
-              isAdminAuthed={isAdmin}
-              session={session}
-              onOpenAuth={() => setShowAuthModal(true)}
-            />
-          }
-        />
+              {session ? (
+                <button
+                  onClick={() => supabase.auth.signOut()}
+                  className="rounded-lg border border-white/10 p-2 hover:bg-white/5"
+                >
+                  <LogOut size={16} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  className="rounded-lg border border-white/10 px-3 py-1 text-xs font-bold uppercase tracking-widest hover:bg-white/5"
+                >
+                  Sign In
+                </button>
+              )}
+            </div>
+          </header>
 
-        <Route
-          path="/admin"
-          element={
-            isAdmin ? (
-              <AdminPage
-                videos={videos}
-                selected={selected}
-                setSelected={setSelected}
-                loading={loading}
-                isAdminAuthed={isAdmin}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-[60vh] text-slate-500 font-bold">
-                Admin access required
+          <main className="pt-16">
+            {gated ? (
+              <div className="flex h-[70vh] items-center justify-center">
+                <Lock size={42} className="text-slate-600" />
               </div>
-            )
-          }
-        />
-      </Routes>
+            ) : (
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <ViewerPage
+                      videos={videos.filter((v) => v.is_public !== false)}
+                      loading={loading}
+                      fetchError={fetchError}
+                      session={session}
+                      search={search}
+                      setSearch={setSearch}
+                      filterType={filterType}
+                      setFilterType={setFilterType}
+                      onOpenAuth={() => setShowAuthModal(true)}
+                      onVideoPlayed={(id) =>
+                        supabase.rpc("increment_view_count", { video_id: id })
+                      }
+                    />
+                  }
+                />
+                <Route
+                  path="/forum"
+                  element={
+                    <ForumPage
+                      session={session}
+                      isAdminAuthed={isAdmin}
+                      onOpenAuth={() => setShowAuthModal(true)}
+                    />
+                  }
+                />
+                <Route
+                  path="/forum/:threadId"
+                  element={
+                    <ForumPage
+                      session={session}
+                      isAdminAuthed={isAdmin}
+                      onOpenAuth={() => setShowAuthModal(true)}
+                    />
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    isAdmin ? (
+                      <AdminPage
+                        videos={videos}
+                        rawVideos={videos}
+                        selected={selected}
+                        setSelected={setSelected}
+                        loading={loading}
+                        search={search}
+                        setSearch={setSearch}
+                        filterType={filterType}
+                        setFilterType={setFilterType}
+                        onUpdateVideo={onUpdateVideo}
+                        onTogglePublic={onTogglePublic}
+                        onToggleFeatured={onToggleFeatured}
+                        onDeleteVideo={onDeleteVideo}
+                        onReorder={onReorder}
+                        isAdminAuthed={isAdmin}
+                      />
+                    ) : (
+                      <Navigate to="/" replace />
+                    )
+                  }
+                />
+              </Routes>
+            )}
+          </main>
+        </>
+      )}
     </div>
   );
 }
