@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, Film, Terminal, Trash2, RefreshCw, Shield, 
   Search, Plus, Save, MoreHorizontal, UserX, UserCheck, X, Upload, Link as LinkIcon, Copy, Calendar,
-  Heart, Bookmark, MessageSquare, Activity, FileText, Lock, Unlock, Download, TrendingUp
+  Heart, Bookmark, MessageSquare, Activity, FileText, Lock, Unlock, Download, TrendingUp,
+  Globe, EyeOff, UserPlus, Settings
 } from "lucide-react";
 
 // --- SKELETON LOADER FOR LIBRARY ---
@@ -109,7 +110,7 @@ function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, h
   );
 }
 
-// --- NEW COMPONENT: USER LIST ITEM (UPDATED TO BE CLICKABLE) ---
+// --- USER LIST ITEM ---
 const UserListItem = ({ user, onDelete, selected, onClick }) => {
     const active = selected && selected.id === user.id;
     return (
@@ -175,6 +176,10 @@ export default function AdminPage(props) {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [systemStats, setSystemStats] = useState({ users: 0, videos: 0, views: 0 });
   
+  // --- NEW: SITE ACCESS CONTROL STATE ---
+  const [siteMode, setSiteMode] = useState("open"); // 'open' | 'login' | 'invite'
+  const [updatingMode, setUpdatingMode] = useState(false);
+
   // --- USER DETAIL STATE ---
   const [userDetails, setUserDetails] = useState({ likes: [], saves: [], forum: [] });
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -294,18 +299,37 @@ export default function AdminPage(props) {
       setLoadingUsers(false);
   }, []);
 
-  // NEW: Fetch System Stats
-  const fetchStats = useCallback(async () => {
-      const { data, error } = await supabase.rpc('admin_get_stats');
-      if (!error && data) setSystemStats(data);
-  }, []);
-
+  // Fetch System Stats & Site Mode
+  // --- Updated Fetch System Stats & Site Mode ---
+const fetchStats = useCallback(async () => {
+    const { data, error } = await supabase.rpc('admin_get_stats');
+    if (!error && data) {
+        setSystemStats(data);
+        
+        // This line ensures the UI buttons highlight the CORRECT mode on load
+        if (data.site_mode) {
+            setSiteMode(data.site_mode);
+        }
+    }
+}, []);
   useEffect(() => { 
       if (adminView === 'users') fetchUsers();
       if (showSystemModal) fetchStats();
   }, [adminView, showSystemModal, fetchUsers, fetchStats]);
 
-  // --- FETCH DEEP USER DETAILS (FIXED: Fetches BOTH Threads and Replies) ---
+  // --- ACCESS CONTROL HANDLER ---
+  const updateSiteMode = async (mode) => {
+      setUpdatingMode(true);
+      const { error } = await supabase.rpc('admin_set_site_mode', { new_mode: mode });
+      if (!error) {
+          setSiteMode(mode);
+      } else {
+          alert("Mode Sync Failed: " + error.message);
+      }
+      setUpdatingMode(false);
+  };
+
+  // --- FETCH DEEP USER DETAILS ---
   useEffect(() => {
       const fetchDeepDetails = async () => {
           if (adminView === 'users' && selected) {
@@ -321,14 +345,12 @@ export default function AdminPage(props) {
                     .eq('user_id', selected.id)
                     .limit(20);
               
-              // 1. Fetch Threads created by User
               const threadsPromise = supabase.from('forum_threads')
                     .select('id, created_at, title, content, view_count')
                     .eq('user_id', selected.id)
                     .order('created_at', { ascending: false })
                     .limit(10);
 
-              // 2. Fetch Replies created by User
               const repliesPromise = supabase.from('forum_posts')
                     .select('id, created_at, content, forum_threads!forum_posts_thread_id_fkey(id, title)')
                     .eq('user_id', selected.id)
@@ -339,7 +361,6 @@ export default function AdminPage(props) {
                   likesPromise, savesPromise, threadsPromise, repliesPromise
               ]);
 
-              // Merge Threads and Replies into one timeline
               const threads = (threadsRes.data || []).map(t => ({ ...t, type: 'thread' }));
               const replies = (repliesRes.data || []).map(r => ({ ...r, type: 'reply' }));
               
@@ -493,7 +514,7 @@ export default function AdminPage(props) {
     } catch (err) { console.error("bulk action failed", err); alert("Bulk action failed."); }
   };
 
-  // --- NEW: Block & Role Management Handlers ---
+  // Block & Role Management
   const handleToggleBlock = async (user) => {
       const newBlockStatus = !user.is_blocked;
       if(!confirm(`Temporarily ${newBlockStatus ? 'block' : 'unblock'} ${user.full_name || 'this user'}?`)) return;
@@ -519,69 +540,32 @@ export default function AdminPage(props) {
       const a = document.createElement('a'); a.href = url; a.download = `studio_backup_${new Date().toISOString()}.json`; a.click();
   };
 
-  // User Actions (Original)
-const handleCreateUser = async (e) => {
-  e.preventDefault();
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    const { data: { session: adminSession } } = await supabase.auth.getSession();
+    if (!adminSession) return alert("Admin session not found");
 
-  // 1. Save current admin session
-  const {
-    data: { session: adminSession },
-  } = await supabase.auth.getSession();
+    const { error } = await supabase.auth.signUp({
+      email: newUserEmail, password: newUserPass,
+      options: { data: { full_name: newName, role: newUserRole } },
+    });
 
-  if (!adminSession) {
-    alert("Admin session not found");
-    return;
-  }
-
-  // 2. Create user (this WILL switch session internally)
-  const { error } = await supabase.auth.signUp({
-    email: newUserEmail,
-    password: newUserPass,
-    options: {
-      data: {
-        full_name: newName,
-        role: newUserRole,
-      },
-    },
-  });
-
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  // 3. Sign out the newly created user
-  await supabase.auth.signOut();
-
-  // 4. Restore admin session explicitly
-  await supabase.auth.setSession({
-    access_token: adminSession.access_token,
-    refresh_token: adminSession.refresh_token,
-  });
-
-  // 5. UI cleanup
-  alert("User created successfully");
-
-  setShowUserModal(false);
-  setNewUserEmail("");
-  setNewUserPass("");
-  setNewName("");
-  setNewUserRole("user");
-
-  if (adminView === "users") {
-    fetchUsers();
-  }
-};
+    if (error) return alert(error.message);
+    await supabase.auth.signOut();
+    await supabase.auth.setSession({ access_token: adminSession.access_token, refresh_token: adminSession.refresh_token });
+    
+    alert("User created successfully");
+    setShowUserModal(false); setNewUserEmail(""); setNewUserPass(""); setNewName(""); setNewUserRole("user");
+    if (adminView === "users") fetchUsers();
+  };
 
   const handleDeleteUser = async (uid) => {
       if(!confirm("Permanently delete user? This cannot be undone.")) return;
-      // FIX: Use RPC for secure deletion
       const { error } = await supabase.rpc('admin_delete_user', { uid });
-      if (error) alert("Delete failed (RPC required): " + error.message);
+      if (error) alert("Delete failed: " + error.message);
       else { setUsers(prev => prev.filter(u => u.id !== uid)); alert("User deleted."); }
   };
 
-  // Login Handler (Original)
   const handleLoginSubmit = (e) => {
     e?.preventDefault();
     const envPass = import.meta.env.VITE_ADMIN_PASSWORD;
@@ -595,7 +579,6 @@ const handleCreateUser = async (e) => {
     onDeleteVideo(video); setSelected(null);
   };
   
-  // Edit logic (Original)
   const openEdit = (video) => {
     setEditingVideo(video);
     setEditFields({
@@ -665,9 +648,7 @@ const handleCreateUser = async (e) => {
     } else setThumbMsg("onRemoveThumbnail not implemented.");
   };
   
-  // ==========================================
-  //  LOGIN SCREEN
-  // ==========================================
+  // LOGIN SCREEN
   if (!isAdminAuthed) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#020617] text-slate-100 relative overflow-hidden font-sans selection:bg-emerald-500/30">
@@ -675,48 +656,19 @@ const handleCreateUser = async (e) => {
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-600/10 blur-[120px]" />
           <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]" />
         </div>
-
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }} 
-          animate={{ opacity: 1, scale: 1 }} 
-          className="w-full max-w-md p-8 rounded-3xl bg-slate-900/50 border border-white/10 backdrop-blur-2xl shadow-2xl shadow-emerald-900/20"
-        >
-          <div className="flex flex-col items-center mb-8">
-            <Shield size={48} className="text-emerald-500 mb-2" />
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Super Admin Console</p>
-          </div>
-
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md p-8 rounded-3xl bg-slate-900/50 border border-white/10 backdrop-blur-2xl shadow-2xl shadow-emerald-900/20">
+          <div className="flex flex-col items-center mb-8"><Shield size={48} className="text-emerald-500 mb-2" /><p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Super Admin Console</p></div>
           <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <input 
-              type="password" 
-              value={inputPassword} 
-              onChange={(e) => setInputPassword(e.target.value)} 
-              placeholder="Enter Access Key" 
-              className="w-full px-5 py-4 rounded-2xl bg-white/5 border border-white/10 text-center text-white focus:border-emerald-500/50 outline-none transition-all tracking-widest"
-              autoFocus
-            />
-            
-            {loginError && (
-              <div className="text-rose-500 text-xs text-center font-bold bg-rose-500/10 p-2 rounded-lg">
-                {loginError}
-              </div>
-            )}
-
-            <button 
-              type="submit" 
-              className="w-full py-4 rounded-2xl bg-emerald-500 text-slate-950 font-black uppercase hover:bg-emerald-400 shadow-lg"
-            >
-              Authenticate
-            </button>
+            <input type="password" value={inputPassword} onChange={(e) => setInputPassword(e.target.value)} placeholder="Enter Access Key" className="w-full px-5 py-4 rounded-2xl bg-white/5 border border-white/10 text-center text-white focus:border-emerald-500/50 outline-none transition-all tracking-widest" autoFocus />
+            {loginError && <div className="text-rose-500 text-xs text-center font-bold bg-rose-500/10 p-2 rounded-lg">{loginError}</div>}
+            <button type="submit" className="w-full py-4 rounded-2xl bg-emerald-500 text-slate-950 font-black uppercase hover:bg-emerald-400 shadow-lg">Authenticate</button>
           </form>
         </motion.div>
       </div>
     );
   }
 
-  // ==========================================
-  //  MAIN DASHBOARD
-  // ==========================================
+  // MAIN DASHBOARD
   return (
     <main className="h-screen flex flex-col bg-[#020617] text-slate-100 overflow-hidden relative isolate font-sans selection:bg-emerald-500/30">
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
@@ -726,16 +678,12 @@ const handleCreateUser = async (e) => {
 
       <header className="h-16 flex-shrink-0 flex items-center justify-between px-6 bg-slate-950/40 border-b border-white/5 backdrop-blur-xl z-50">
         <div className="flex items-center gap-6">
-          <div className="text-lg font-black tracking-tighter uppercase text-white flex items-center gap-2"> 
-            <Shield size={18} className="text-emerald-500" /> Admin
-          </div>
-          {/* MODE SWITCHER */}
+          <div className="text-lg font-black tracking-tighter uppercase text-white flex items-center gap-2"><Shield size={18} className="text-emerald-500" /> Admin</div>
           <div className="flex bg-white/5 p-1 rounded-lg">
              <button onClick={() => setAdminView('media')} className={`px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${adminView === 'media' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}><Film size={12} className="inline mr-2" /> Media</button>
              <button onClick={() => setAdminView('users')} className={`px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${adminView === 'users' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}><Users size={12} className="inline mr-2" /> Users</button>
           </div>
         </div>
-        
         <div className="flex gap-3">
           <button onClick={() => setShowSystemModal(true)} className="p-2.5 rounded-full bg-white/5 border border-white/10 hover:text-white text-slate-400 transition-all" title="System Commands"><Terminal size={14} /></button>
           {adminView === 'media' && (
@@ -873,7 +821,6 @@ const handleCreateUser = async (e) => {
                         <p className="text-sm text-slate-500 font-mono mt-1">{selected.email}</p>
                     </div>
 
-                    {/* NEW: Role & Block Actions */}
                     <div className="flex justify-center gap-3 w-full">
                         <button onClick={() => handleToggleBlock(selected)} className={`flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all border flex items-center justify-center gap-2 ${selected.is_blocked ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20' : 'bg-rose-500/10 border-rose-500/30 text-rose-500 hover:bg-rose-500/20'}`}>
                             {selected.is_blocked ? <><Unlock size={14}/> Lift Block</> : <><Lock size={14}/> Temp Block</>}
@@ -926,7 +873,6 @@ const handleCreateUser = async (e) => {
                         
                         {editingVideo && (
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                            {/* Primary Info */}
                             <div className="space-y-1">
                                 <label className="text-[8px] font-black text-slate-600 uppercase ml-2 tracking-widest">Asset Name</label>
                                 <input value={editFields.title} onChange={(e) => setEditFields({...editFields, title: e.target.value})} className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/5 text-xs outline-none focus:border-emerald-500/50 transition-colors" />
@@ -936,7 +882,6 @@ const handleCreateUser = async (e) => {
                                 <textarea value={editFields.description} onChange={(e) => setEditFields({...editFields, description: e.target.value})} rows={3} className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/5 text-xs outline-none resize-none focus:border-emerald-500/50 transition-colors" />
                             </div>
                             
-                            {/* EXPANDED FIELDS (Links/Paths) */}
                             <div className="pt-2 border-t border-white/5 space-y-2">
                                 <div className="space-y-1">
                                     <label className="text-[8px] font-black text-emerald-500 uppercase ml-2 tracking-widest">Video URL (External)</label>
@@ -1042,7 +987,6 @@ const handleCreateUser = async (e) => {
                         <div className="space-y-4">
                             {loadingDetails ? <div className="text-center py-10 text-xs text-slate-500">Loading history...</div> : (
                                 <>
-                                    {/* LIKED VIDEOS SECTION */}
                                     <div>
                                         <h4 className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Heart size={10} /> Liked Videos</h4>
                                         {userDetails.likes.length > 0 ? (
@@ -1051,7 +995,6 @@ const handleCreateUser = async (e) => {
                                                     const thumbUrl = like.videos?.thumbnail_path 
                                                         ? `https://ijqulnzypdpprefinynn.supabase.co/storage/v1/object/public/thumbnails/${like.videos.thumbnail_path}`
                                                         : "https://placehold.co/100x56";
-
                                                     return (
                                                         <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/5 flex gap-2 items-center">
                                                             <img src={thumbUrl} className="w-10 h-6 rounded bg-black object-cover" />
@@ -1065,8 +1008,6 @@ const handleCreateUser = async (e) => {
                                             </div>
                                         ) : <div className="text-[9px] text-slate-600 italic p-2">No likes recorded.</div>}
                                     </div>
-                                    
-                                    {/* WATCHLIST SECTION */}
                                     <div>
                                         <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2 mt-4"><Bookmark size={10} /> Watchlist</h4>
                                         {userDetails.saves.length > 0 ? (
@@ -1075,7 +1016,6 @@ const handleCreateUser = async (e) => {
                                                     const thumbUrl = save.videos?.thumbnail_path 
                                                         ? `https://ijqulnzypdpprefinynn.supabase.co/storage/v1/object/public/thumbnails/${save.videos.thumbnail_path}`
                                                         : "https://placehold.co/100x56";
-
                                                     return (
                                                         <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/5 flex gap-2 items-center">
                                                             <img src={thumbUrl} className="w-10 h-6 rounded bg-black object-cover" />
@@ -1109,7 +1049,6 @@ const handleCreateUser = async (e) => {
                                                         </span>
                                                         <span className="text-[8px] text-slate-500">{new Date(item.created_at).toLocaleDateString()}</span>
                                                     </div>
-
                                                     {item.type === 'thread' ? (
                                                         <>
                                                             <div className="text-[10px] text-white font-bold truncate">{item.title}</div>
@@ -1188,9 +1127,42 @@ const handleCreateUser = async (e) => {
         )}
 
         {showSystemModal && (
-            <ModalBase title="System Terminal" onClose={() => setShowSystemModal(false)} size="max-w-2xl">
+            <ModalBase title="System Terminal & Security" onClose={() => setShowSystemModal(false)} size="max-w-2xl">
                 <div className="space-y-6">
-                    {/* NEW: STATS ROW */}
+                    {/* NEW: SITE ACCESS CONTROL PANEL */}
+                    <div className="p-1 bg-white/5 rounded-2xl border border-white/10">
+                        <div className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 mb-2 flex items-center gap-2">
+                            <Shield size={12} className="text-emerald-500" /> Site Visibility & Access Modes
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 p-2">
+                            <button 
+                                onClick={() => updateSiteMode('open')}
+                                className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${siteMode === 'open' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'bg-white/5 border-transparent text-slate-500 hover:bg-white/10'}`}
+                            >
+                                <Globe size={20} />
+                                <span className="text-[10px] font-black uppercase tracking-tight">Open Access</span>
+                                <span className="text-[7px] opacity-60 text-center leading-tight">Public visibility and browsing</span>
+                            </button>
+                            <button 
+                                onClick={() => updateSiteMode('login')}
+                                className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${siteMode === 'login' ? 'bg-blue-500/20 border-blue-500 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'bg-white/5 border-transparent text-slate-500 hover:bg-white/10'}`}
+                            >
+                                <Lock size={20} />
+                                <span className="text-[10px] font-black uppercase tracking-tight">Private Access</span>
+                                <span className="text-[7px] opacity-60 text-center leading-tight">Requires login to view library</span>
+                            </button>
+                            <button 
+                                onClick={() => updateSiteMode('invite')}
+                                className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${siteMode === 'invite' ? 'bg-purple-500/20 border-purple-500 text-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.1)]' : 'bg-white/5 border-transparent text-slate-500 hover:bg-white/10'}`}
+                            >
+                                <EyeOff size={20} />
+                                <span className="text-[10px] font-black uppercase tracking-tight">Restricted</span>
+                                <span className="text-[7px] opacity-60 text-center leading-tight">Existing users only. No signups.</span>
+                            </button>
+                        </div>
+                        {updatingMode && <div className="text-center pb-2 text-[9px] text-emerald-500 animate-pulse font-bold uppercase tracking-[0.2em]">Syncing Registry...</div>}
+                    </div>
+
                     <div className="grid grid-cols-3 gap-3">
                         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
                             <div className="text-2xl font-black text-emerald-400">{systemStats.videos || 0}</div>
