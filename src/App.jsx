@@ -5,7 +5,7 @@ import { supabase } from "./supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   LogOut, ShieldAlert, Lock, PlayCircle, Terminal, 
-  MessageSquare, LayoutGrid, LogIn 
+  MessageSquare, LayoutGrid, LogIn, Bell, CheckCircle, Wifi, WifiOff
 } from "lucide-react";
 
 // --- COMPONENTS ---
@@ -43,7 +43,7 @@ const checkIfBlocked = async (userId) => {
 };
 
 /* -------------------------------------------------------
-    UI: LOADING & BLOCK SCREENS
+    UI: LOADING, TOAST & BLOCK SCREENS
 ------------------------------------------------------- */
 const InitialLoader = memo(() => (
   <motion.div
@@ -57,9 +57,32 @@ const InitialLoader = memo(() => (
       <div className="text-white font-black tracking-[0.45em] text-lg animate-pulse">
         STREAM STUDIO
       </div>
+      <div className="text-emerald-500/50 text-[10px] font-mono mt-2">INITIALIZING UPLINK...</div>
     </div>
   </motion.div>
 ));
+
+const SecurityToast = ({ message, type }) => (
+  <motion.div
+    initial={{ y: 50, opacity: 0, scale: 0.9 }}
+    animate={{ y: 0, opacity: 1, scale: 1 }}
+    exit={{ y: 20, opacity: 0, scale: 0.95 }}
+    className="fixed bottom-4 left-4 right-4 md:left-auto md:bottom-6 md:right-6 z-[200] md:w-auto md:max-w-sm"
+  >
+    <div className="bg-slate-900/90 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl flex items-center gap-4 relative overflow-hidden">
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${type === 'alert' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+        <div className={`p-2 rounded-full flex-shrink-0 ${type === 'alert' ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+            {type === 'alert' ? <Lock size={18} /> : <CheckCircle size={18} />}
+        </div>
+        <div className="min-w-0">
+            <h4 className={`text-[10px] font-black uppercase tracking-widest truncate ${type === 'alert' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                {type === 'alert' ? 'Security Update' : 'System Status'}
+            </h4>
+            <p className="text-xs text-slate-300 font-bold mt-0.5 leading-tight">{message}</p>
+        </div>
+    </div>
+  </motion.div>
+);
 
 const BlockedOverlay = ({ onLogout }) => (
   <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
@@ -81,6 +104,18 @@ const BlockedOverlay = ({ onLogout }) => (
       </div>
     </div>
   </div>
+);
+
+const ConnectionStatus = ({ status }) => (
+    <div className="fixed bottom-3 left-3 md:bottom-4 md:left-4 z-50 flex items-center gap-1.5 md:gap-2 pointer-events-none opacity-60 mix-blend-screen transition-all">
+        <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full transition-all duration-500 ${status === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-rose-500 animate-pulse'}`} />
+        <span className="hidden sm:block text-[9px] font-mono text-slate-500 uppercase tracking-widest">
+            {status === 'connected' ? 'SYSTEM ONLINE' : 'ATTEMPTING RECONNECT...'}
+        </span>
+        <span className="block sm:hidden text-[8px] font-mono text-slate-500 uppercase tracking-widest">
+            {status === 'connected' ? 'ONLINE' : 'RETRYING'}
+        </span>
+    </div>
 );
 
 /* -------------------------------------------------------
@@ -115,10 +150,6 @@ const AuthModal = ({ onClose, disableSignup, onVerifying }) => {
 
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) throw authError;
-
-      // Note: We intentionally allow the main App listener to handle the block check
-      // to avoid double-logic here. The App listener will catch the SIGNED_IN event
-      // and immediately show the BlockedOverlay if needed.
 
       if (onVerifying) onVerifying(false);
       onClose();
@@ -193,7 +224,11 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [blockedMessage, setBlockedMessage] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  
+  // --- SITE ACCESS & TOAST STATE ---
   const [accessMode, setAccessMode] = useState("open");
+  const [toast, setToast] = useState(null);
+  const [realtimeStatus, setRealtimeStatus] = useState("connecting");
 
   // --- SEARCH STATE ---
   const [viewerSearch, setViewerSearch] = useState("");
@@ -216,36 +251,39 @@ export default function App() {
   const isVerifying = useRef(false);
   const [isVerifyingState, setIsVerifyingState] = useState(false);
 
+  // Helper to trigger toasts
+  const triggerToast = (msg, type = 'info') => {
+      setToast({ msg, type });
+      setTimeout(() => setToast(null), 5000);
+  };
+
   /* --- 1. AUTH & SESSION LISTENER --- */
   useEffect(() => {
     let mounted = true;
 
-    // Safety Timeout for Loading
-    const safetyTimer = setTimeout(() => {
-        if (mounted && !authReady) {
-            console.warn("Auth check timed out, forcing UI load.");
-            setAuthReady(true);
-        }
-    }, 1500);
-
     const initSession = async () => {
         try {
-            const { data } = await supabase.auth.getSession();
-            if (mounted && data?.session) {
-                setSession(data.session);
-                
-                const isUserAdmin = data.session.user.user_metadata?.role === "admin";
-                setIsAdmin(isUserAdmin);
-                if (isUserAdmin) localStorage.setItem("studio_admin_active", "true");
-                
-                // Initial Block Check
-                checkIfBlocked(data.session.user.id).then(blocked => {
-                    if (mounted && blocked) setBlockedMessage("Your account has been suspended.");
-                });
+            // Wait for session with a soft timeout
+            const { data } = await Promise.race([
+                supabase.auth.getSession(),
+                new Promise(resolve => setTimeout(() => resolve({ data: { session: null } }), 5000)) // 5s timeout
+            ]);
+
+            if (mounted) {
+                if (data?.session) {
+                    setSession(data.session);
+                    const isUserAdmin = data.session.user.user_metadata?.role === "admin";
+                    setIsAdmin(isUserAdmin);
+                    if (isUserAdmin) localStorage.setItem("studio_admin_active", "true");
+                    
+                    checkIfBlocked(data.session.user.id).then(blocked => {
+                        if (mounted && blocked) setBlockedMessage("Your account has been suspended.");
+                    });
+                }
+                setAuthReady(true);
             }
         } catch (err) {
             console.error("Auth init error:", err);
-        } finally {
             if (mounted) setAuthReady(true);
         }
     };
@@ -265,25 +303,18 @@ export default function App() {
               if(localStorage.getItem("studio_admin_active") !== "true") setIsAdmin(false);
           }
 
-          // Check block status (Logged in)
           checkIfBlocked(s.user.id).then(blocked => {
               if (mounted && blocked) setBlockedMessage("Your account has been suspended.");
               else if (mounted) setBlockedMessage(null);
           });
       } else {
-          // Logged Out
           if (localStorage.getItem("studio_admin_active") !== "true") setIsAdmin(false);
-          
-          // FIX: Do NOT clear blockedMessage here.
-          // If a block caused the logout, we want the message to persist.
-          // The overlay's button handles the full reset via page reload.
       }
       setAuthReady(true);
     });
 
     return () => {
         mounted = false;
-        clearTimeout(safetyTimer);
         sub.subscription.unsubscribe();
     };
   }, []);
@@ -300,7 +331,7 @@ export default function App() {
         (payload) => {
           if (payload.new.is_blocked) {
             setBlockedMessage("Your account has been suspended.");
-            supabase.auth.signOut(); // Triggers onAuthStateChange, but we keep the msg now
+            supabase.auth.signOut();
           } else {
             setBlockedMessage(null);
           }
@@ -340,7 +371,6 @@ export default function App() {
 
   useEffect(() => { fetchVideos(); }, [fetchVideos]);
 
-  // Sync selected video if data updates (Silent update)
   useEffect(() => {
     if (selected && videos.length > 0) {
       const updated = videos.find(v => v.id === selected.id);
@@ -349,8 +379,6 @@ export default function App() {
   }, [videos, selected]);
 
   /* --- 3. THUMBNAIL OPERATIONS --- */
-  // NOTE: These operations trigger fetchVideos() which updates 'videos' state.
-  // The useEffect above then silently updates 'selected', preventing UI flash/msg loss.
   const onUpdateThumbnail = async (video, second = 7) => {
     try {
       const videoUrl = video.public_url || video.external_url;
@@ -381,13 +409,12 @@ export default function App() {
     }
   };
 
-  /* --- 4. ADMIN OPERATIONS (Auto-Shift & Auto-Refresh) --- */
+  /* --- 4. ADMIN OPERATIONS --- */
   const handleAddExternal = async (e, position) => {
       if(e) e.preventDefault();
       if (!extTitle || !extUrl) return alert("Title and URL required");
       setSavingExternal(true);
       try {
-          // SHIFT LOGIC
           let targetIndex = videos.length;
           const posNum = Number(position);
           if (position && !isNaN(posNum) && posNum > 0) targetIndex = posNum - 1;
@@ -420,7 +447,6 @@ export default function App() {
           const { error: uploadError } = await supabase.storage.from('videos').upload(filePath, upFile);
           if (uploadError) throw uploadError;
 
-          // SHIFT LOGIC
           let targetIndex = videos.length;
           const posNum = Number(position);
           if (position && !isNaN(posNum) && posNum > 0) targetIndex = posNum - 1;
@@ -465,14 +491,50 @@ export default function App() {
       if (!error) await fetchVideos();
   };
 
-  /* --- 5. ACCESS MODE SYNC --- */
+  /* --- 5. ACCESS MODE SYNC & REALTIME TOASTS --- */
   useEffect(() => {
     const fetchMode = async () => {
-      const { data } = await supabase.rpc('admin_get_stats');
-      if (data?.site_mode) setAccessMode(data.site_mode);
+      // Check RPC availability first
+      try {
+          const { data, error } = await supabase.rpc('admin_get_stats');
+          if (error) throw error;
+          if (data?.site_mode) setAccessMode(data.site_mode);
+      } catch (err) {
+          console.warn("RPC admin_get_stats failed. Defaulting to OPEN mode.");
+          setAccessMode("open");
+      }
     };
     fetchMode();
-    const sub = supabase.channel('site_settings').on('postgres_changes', { event: 'UPDATE', table: 'site_settings' }, fetchMode).subscribe();
+
+    const sub = supabase.channel('site_settings_global_listener')
+      .on(
+        'postgres_changes', 
+        { event: 'UPDATE', schema: 'public', table: 'site_settings' }, 
+        (payload) => {
+            console.log("[REALTIME] Payload Received:", payload); 
+
+            if (payload.new) {
+                // HANDLE SITE MODE CHANGE
+                if (payload.new.setting_name === 'site_mode') {
+                    const newMode = payload.new.setting_value;
+                    setAccessMode(newMode); 
+                    if (newMode === 'login') triggerToast("Admin enabled Private Access.", "alert");
+                    else if (newMode === 'invite') triggerToast("System is now in Restricted Mode.", "alert");
+                    else if (newMode === 'open') triggerToast("Open Access restored.", "success");
+                }
+                
+                // HANDLE FORCE REFRESH TRIGGER
+                if (payload.new.setting_name === 'force_refresh_trigger') {
+                    console.log("FORCE REFRESH SIGNAL RECEIVED");
+                    window.location.reload();
+                }
+            }
+        }
+      )
+      .subscribe((status) => {
+          setRealtimeStatus(status === 'SUBSCRIBED' ? 'connected' : 'disconnected');
+      });
+
     return () => supabase.removeChannel(sub);
   }, []);
 
@@ -483,7 +545,6 @@ export default function App() {
   const showGateLock = isGated || isVerifyingState;
   const showModal = showAuthModal || isGated || isVerifyingState;
 
-  // Nav Item Helper
   const NavItem = ({ to, label, icon: Icon }) => {
     const active = location.pathname === to || (to !== "/" && location.pathname.startsWith(to));
     return (
@@ -498,6 +559,12 @@ export default function App() {
     <div className="min-h-screen bg-[#020617] text-white font-sans selection:bg-emerald-500/30">
       
       {!authReady && <InitialLoader />}
+
+      <AnimatePresence>
+        {toast && <SecurityToast message={toast.msg} type={toast.type} />}
+      </AnimatePresence>
+
+      <ConnectionStatus status={realtimeStatus} />
       
       {authReady && (
         <>
