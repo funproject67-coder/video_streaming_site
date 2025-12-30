@@ -540,6 +540,14 @@ const fetchStats = useCallback(async () => {
       const a = document.createElement('a'); a.href = url; a.download = `studio_backup_${new Date().toISOString()}.json`; a.click();
   };
 
+  const handleForceRefresh = async () => {
+    if (!confirm("⚠️ FORCE RELOAD ALL CLIENTS?\n\nThis will instantly refresh the page for EVERY active user connected to the site. Use this to push critical updates.")) return;
+
+    const { error } = await supabase.rpc('admin_trigger_force_refresh');
+    if (error) alert("Failed to send signal: " + error.message);
+    else alert("Signal sent! All clients will refresh momentarily.");
+};
+
   const handleCreateUser = async (e) => {
     e.preventDefault();
     const { data: { session: adminSession } } = await supabase.auth.getSession();
@@ -1183,10 +1191,10 @@ const fetchStats = useCallback(async () => {
                             <div><div className="text-xs font-black uppercase">Database Dump</div><div className="text-[9px] opacity-50">Export all JSON</div></div>
                             <Download size={20} className="text-blue-400 group-hover:scale-110 transition-transform" />
                         </button>
-                        <button onClick={() => window.location.reload()} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-left transition-all flex items-center justify-between group">
-                            <div><div className="text-xs font-black uppercase">Force Refresh</div><div className="text-[9px] opacity-50">Reload all sessions</div></div>
-                            <RefreshCw size={20} className="text-emerald-400 group-hover:rotate-180 transition-transform" />
-                        </button>
+                        <button onClick={handleForceRefresh} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-left transition-all flex items-center justify-between group">
+    <div><div className="text-xs font-black uppercase">Force Refresh</div><div className="text-[9px] opacity-50">Reload all sessions</div></div>
+    <RefreshCw size={20} className="text-emerald-400 group-hover:rotate-180 transition-transform" />
+</button>
                         <button onClick={() => alert("Cache cleared")} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-left transition-all">
                             <RefreshCw size={20} className="mb-2 text-blue-400" />
                             <div className="text-xs font-black text-white uppercase">Flush Cache</div>
