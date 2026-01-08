@@ -366,14 +366,20 @@ const RelatedVideos = ({ currentVideo, allVideos, onPlay }) => {
       </h3>
       <div className="flex flex-col gap-3">
         {list.map(video => (
-          <button key={video.id} onClick={() => onPlay(video)} className="group flex gap-4 text-left w-full p-2 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-white/5 active:bg-white/10">
-            <div className="w-28 h-16 md:w-36 md:h-20 bg-black rounded-lg overflow-hidden relative flex-shrink-0 ring-1 ring-white/10 shadow-lg group-hover:ring-emerald-500/50 transition-all">
+          <button key={video.id} onClick={() => onPlay(video)} className="group flex gap-3 text-left w-full p-2 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-white/5 active:bg-white/10">
+            <div className="w-28 h-16 md:w-32 md:h-18 bg-black rounded-lg overflow-hidden relative flex-shrink-0 ring-1 ring-white/10 shadow-lg group-hover:ring-emerald-500/50 transition-all">
                <img src={video.thumbnail_url || "https://placehold.co/600x400/020617/white?text=Preview"} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="" />
             </div>
-            <div className="flex-1 min-w-0 py-1 flex flex-col justify-center">
-               <h4 className="text-xs md:text-sm font-bold text-slate-200 group-hover:text-emerald-400 line-clamp-2 leading-snug transition-colors">{video.title}</h4>
-               <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                 <span className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase tracking-wide">{Number(video.view_count || 0).toLocaleString()} views</span>
+            <div className="flex-1 min-w-0 py-0.5 flex flex-col justify-center">
+               <h4 className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 line-clamp-2 leading-snug transition-colors mb-1">{video.title}</h4>
+               
+               {/* UPDATED METADATA ROW */}
+               <div className="flex flex-wrap items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{Number(video.view_count || 0).toLocaleString()} views</span>
+                 <span className="text-[8px] text-slate-600">•</span>
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">♥ {video.likes_count || 0}</span>
+                 <span className="text-[8px] text-slate-600">•</span>
+                 <span className="text-[9px] font-black text-emerald-500 uppercase tracking-wider truncate max-w-[80px]">{video.category || "General"}</span>
                </div>
             </div>
           </button>
