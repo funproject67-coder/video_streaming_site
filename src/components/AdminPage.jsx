@@ -8,7 +8,7 @@ import {
   Users, Film, Terminal, Trash2, RefreshCw, Shield, 
   Search, Plus, Save, MoreHorizontal, UserX, UserCheck, X, Upload, Link as LinkIcon, Copy, Calendar,
   Heart, Bookmark, MessageSquare, Activity, FileText, Lock, Unlock, Download, TrendingUp,
-  Globe, EyeOff, UserPlus, Settings, Clock, Play, CheckCircle, AlertCircle, Move
+  Globe, EyeOff, UserPlus, Settings, Clock, Play, CheckCircle, AlertCircle, Move, CheckSquare
 } from "lucide-react";
 
 // --- TOAST NOTIFICATION SYSTEM ---
@@ -252,7 +252,7 @@ export default function AdminPage(props) {
   const leftWidthRef = useRef(leftWidth);
   const rightWidthRef = useRef(rightWidth);
   const animationRef = useRef(null); 
-  const containerRef = useRef(null); // --- FIXED: ADDED THIS REF ---
+  const containerRef = useRef(null); // Container Ref for Resizing
 
   useEffect(() => { leftWidthRef.current = leftWidth; }, [leftWidth]);
   useEffect(() => { rightWidthRef.current = rightWidth; }, [rightWidth]);
@@ -446,6 +446,24 @@ export default function AdminPage(props) {
     });
     return { total, filtered: filteredList, isSortable };
   }, [rawVideos, videos, localVideos, search, filterType, filterStatus, adminView]);
+
+  // --- NEW: SELECT ALL LOGIC ---
+  const isAllSelected = useMemo(() => {
+      if (filtered.length === 0) return false;
+      return filtered.every(v => selectedIds.has(v.id));
+  }, [filtered, selectedIds]);
+
+  const handleSelectAll = () => {
+      if (isAllSelected) {
+          const newSet = new Set(selectedIds);
+          filtered.forEach(v => newSet.delete(v.id));
+          setSelectedIds(newSet);
+      } else {
+          const newSet = new Set(selectedIds);
+          filtered.forEach(v => newSet.add(v.id));
+          setSelectedIds(newSet);
+      }
+  };
 
   // Drag and Drop
   const handleDragStart = (e, id) => {
@@ -784,9 +802,22 @@ export default function AdminPage(props) {
                 </div>
             )}
             {adminView === 'media' && (
-                <button onClick={() => setShowReorderModal(true)} className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase border transition-all ${isSortable ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'bg-white/5 border-white/10 text-slate-500 opacity-50 cursor-not-allowed'}`} disabled={!isSortable}>
-                    {isSortable ? "Save Grid Order" : "Clear Filters to Reorder"}
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={handleSelectAll}
+                        className={`flex-1 py-2.5 rounded-xl border text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${isAllSelected ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
+                    >
+                        {isAllSelected ? <CheckSquare size={12} /> : <div className="w-3 h-3 border border-current rounded-sm opacity-50" />}
+                        {isAllSelected ? "Deselect All" : "Select All"}
+                    </button>
+                    <button 
+                        onClick={() => setShowReorderModal(true)} 
+                        className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase border transition-all ${isSortable ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'bg-white/5 border-white/10 text-slate-500 opacity-50 cursor-not-allowed'}`} 
+                        disabled={!isSortable}
+                    >
+                        {isSortable ? "Save Order" : "Reorder"}
+                    </button>
+                </div>
             )}
           </div>
 
