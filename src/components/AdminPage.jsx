@@ -8,8 +8,25 @@ import {
   Users, Film, Terminal, Trash2, RefreshCw, Shield, 
   Search, Plus, Save, MoreHorizontal, UserX, UserCheck, X, Upload, Link as LinkIcon, Copy, Calendar,
   Heart, Bookmark, MessageSquare, Activity, FileText, Lock, Unlock, Download, TrendingUp,
-  Globe, EyeOff, UserPlus, Settings, Clock, Play
+  Globe, EyeOff, UserPlus, Settings, Clock, Play, CheckCircle, AlertCircle, Move
 } from "lucide-react";
+
+// --- TOAST NOTIFICATION SYSTEM ---
+const Toast = ({ message, type, onClose }) => (
+  <motion.div 
+    initial={{ opacity: 0, y: 50, scale: 0.9 }} 
+    animate={{ opacity: 1, y: 0, scale: 1 }} 
+    exit={{ opacity: 0, y: 20, scale: 0.9 }}
+    className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md border ${
+      type === 'error' ? 'bg-rose-950/90 border-rose-500/50 text-rose-200' : 
+      'bg-emerald-950/90 border-emerald-500/50 text-emerald-200'
+    }`}
+  >
+    {type === 'error' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
+    <span className="text-xs font-bold tracking-wide">{message}</span>
+    <button onClick={onClose} className="ml-2 opacity-50 hover:opacity-100"><X size={14}/></button>
+  </motion.div>
+);
 
 // --- SKELETON LOADER FOR LIBRARY ---
 const LibraryListSkeleton = () => (
@@ -28,17 +45,17 @@ const LibraryListSkeleton = () => (
 );
 
 /**
- * UI PRIMITIVES: GLASS MODAL (Compacted)
+ * UI PRIMITIVES: GLASS MODAL (Enhanced)
  */
 const ModalBase = ({ title, onClose, children, size = "max-w-lg" }) => (
   <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
     <motion.div 
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} 
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="absolute inset-0 bg-[#020617]/80 backdrop-blur-md" 
       onClick={onClose} 
     />
     <motion.div 
-      initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+      initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
       className={`relative z-[110] w-full ${size} rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl shadow-emerald-900/20 backdrop-blur-2xl max-h-[85vh] overflow-y-auto custom-scrollbar`}
     >
       <div className="mb-4 flex items-center justify-between border-b border-white/5 pb-3">
@@ -53,7 +70,7 @@ const ModalBase = ({ title, onClose, children, size = "max-w-lg" }) => (
 );
 
 /**
- * UI PRIMITIVES: LIBRARY CARD
+ * UI PRIMITIVES: LIBRARY CARD (Updated for Drag & Drop)
  */
 function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, handleDragStart, handleDragOver, handleDrop, isDragging, isSortable, permanentOrder }) {
   const thumb = item.thumbnail_url || item.public_url || item.external_url || null;
@@ -75,7 +92,7 @@ function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, h
     >
       <div className="flex flex-col items-center gap-1 flex-shrink-0 w-6">
         <span className="text-[9px] font-black text-slate-500 w-full text-center tabular-nums">{permanentOrder}</span>
-        {isSortable && <div className="text-slate-600 group-hover:text-emerald-500 transition-colors text-[10px] cursor-grab active:cursor-grabbing">⠿</div>}
+        {isSortable && <div className="text-slate-600 group-hover:text-emerald-500 transition-colors text-[10px] cursor-grab active:cursor-grabbing"><Move size={10} /></div>}
       </div>
 
       <div className="w-16 h-10 flex-shrink-0 rounded-lg overflow-hidden bg-black relative ring-1 ring-white/10 shadow-sm">
@@ -104,7 +121,7 @@ function LibraryCard({ item, selected, setSelected, toggleSelect, selectedIds, h
         className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all border text-[10px]
           ${isSelectedForBulk ? "bg-emerald-500 border-emerald-500 text-slate-950 font-black" : "bg-white/5 border-white/10 text-slate-500 hover:text-white hover:bg-white/10"}`}
       >
-        {isSelectedForBulk ? "✓" : "+"}
+        {isSelectedForBulk ? <CheckCircle size={12} /> : "+"}
       </button>
     </div>
   );
@@ -147,7 +164,7 @@ const useTabState = (defaultTab) => {
             className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all 
                 ${activeTab === tab 
                 ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20" 
-                : "text-slate-500 hover:text-white hover:bg-white/5"
+                : "text-slate-400 hover:text-white hover:bg-white/5"
             }`}
         >
             {children}
@@ -183,6 +200,9 @@ export default function AdminPage(props) {
   // --- USER DETAIL STATE ---
   const [userDetails, setUserDetails] = useState({ likes: [], saves: [], forum: [], history: [] }); // Added history
   const [loadingDetails, setLoadingDetails] = useState(false);
+
+  // --- TOAST STATE ---
+  const [toast, setToast] = useState(null); // { message, type }
 
   // --- Local State ---
   const [localVideos, setLocalVideos] = useState(Array.isArray(videos) ? videos.slice() : []);
@@ -232,9 +252,16 @@ export default function AdminPage(props) {
   const leftWidthRef = useRef(leftWidth);
   const rightWidthRef = useRef(rightWidth);
   const animationRef = useRef(null); 
+  const containerRef = useRef(null); // --- FIXED: ADDED THIS REF ---
 
   useEffect(() => { leftWidthRef.current = leftWidth; }, [leftWidth]);
   useEffect(() => { rightWidthRef.current = rightWidth; }, [rightWidth]);
+
+  // --- HELPERS ---
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   // Resizer Logic
   const stopResize = useCallback(() => {
@@ -293,7 +320,7 @@ export default function AdminPage(props) {
       setLoadingUsers(true);
       const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
       if (!error) setUsers(data);
-      else console.warn("User fetch error:", error);
+      else showToast("Failed to fetch users", "error");
       setLoadingUsers(false);
   }, []);
 
@@ -318,92 +345,60 @@ export default function AdminPage(props) {
       const { error } = await supabase.rpc('admin_set_site_mode', { new_mode: mode });
       if (!error) {
           setSiteMode(mode);
+          showToast("Site mode updated: " + mode);
       } else {
-          alert("Mode Sync Failed: " + error.message);
+          showToast("Mode Sync Failed: " + error.message, "error");
       }
       setUpdatingMode(false);
   };
 
-  // --- FETCH DEEP USER DETAILS (Robust Fix) ---
+  // --- FETCH DEEP USER DETAILS (WITH ROBUST HISTORY FIX) ---
   useEffect(() => {
       const fetchDeepDetails = async () => {
           if (adminView === 'users' && selected) {
               setLoadingDetails(true);
               
               try {
-                  // 1. Fetch Likes
-                  const likesPromise = supabase.from('video_likes')
-                      .select('created_at, videos!video_likes_video_id_fkey(id, title, thumbnail_path)')
-                      .eq('user_id', selected.id).limit(20);
-                      
-                  // 2. Fetch Saves
-                  const savesPromise = supabase.from('video_saves')
-                      .select('created_at, videos!video_saves_video_id_fkey(id, title, thumbnail_path)')
-                      .eq('user_id', selected.id).limit(20);
-                  
-                  // 3. Fetch History IDs (Step 1: Get the IDs first)
-                  const historyPromise = supabase.from('video_history')
-                      .select('video_id, watched_at')
-                      .eq('user_id', selected.id)
-                      .order('watched_at', { ascending: false })
-                      .limit(30);
-
-                  // 4. Fetch Forum Data
-                  const threadsPromise = supabase.from('forum_threads')
-                      .select('id, created_at, title, content, view_count')
-                      .eq('user_id', selected.id).order('created_at', { ascending: false }).limit(10);
-
-                  const repliesPromise = supabase.from('forum_posts')
-                      .select('id, created_at, content, forum_threads!forum_posts_thread_id_fkey(id, title)')
-                      .eq('user_id', selected.id).order('created_at', { ascending: false }).limit(10);
-
+                  // 1. Parallel Fetch: Likes, Saves, History IDs, Forum
                   const [likesRes, savesRes, historyRes, threadsRes, repliesRes] = await Promise.all([
-                      likesPromise, savesPromise, historyPromise, threadsPromise, repliesPromise
+                      supabase.from('video_likes').select('created_at, videos!video_likes_video_id_fkey(id, title, thumbnail_path)').eq('user_id', selected.id).limit(20),
+                      supabase.from('video_saves').select('created_at, videos!video_saves_video_id_fkey(id, title, thumbnail_path)').eq('user_id', selected.id).limit(20),
+                      // History: Get IDs ONLY first to bypass join errors
+                      supabase.from('video_history').select('video_id, watched_at').eq('user_id', selected.id).order('watched_at', { ascending: false }).limit(30),
+                      supabase.from('forum_threads').select('id, created_at, title, content, view_count').eq('user_id', selected.id).order('created_at', { ascending: false }).limit(10),
+                      supabase.from('forum_posts').select('id, created_at, content, forum_threads!forum_posts_thread_id_fkey(id, title)').eq('user_id', selected.id).order('created_at', { ascending: false }).limit(10)
                   ]);
 
-                  // --- FIX: MANUALLY FETCH HISTORY VIDEO DETAILS ---
+                  // 2. Manually Hydrate History Details (The Fix)
                   let finalHistory = [];
                   const rawHistory = historyRes.data || [];
                   
                   if (rawHistory.length > 0) {
-                      // Extract unique Video IDs
                       const videoIds = rawHistory.map(h => h.video_id);
-                      
-                      // Fetch details for these specific IDs from DB (Bypassing localVideos)
+                      // Fetch details for these IDs specifically
                       const { data: videoDetails } = await supabase
                           .from('videos')
                           .select('id, title, thumbnail_path, external_url')
                           .in('id', videoIds);
                       
-                      // Merge history timestamp with video details
                       finalHistory = rawHistory.map(h => {
                           const vid = videoDetails?.find(v => v.id === h.video_id);
+                          if (!vid) return { id: h.video_id, title: "Deleted Asset", thumbnail_url: null, watched_at: h.watched_at };
                           
-                          // Handle deleted videos gracefully
-                          if (!vid) return {
-                              id: h.video_id,
-                              title: "Deleted Asset",
-                              thumbnail_url: "https://placehold.co/100x56?text=Deleted",
-                              watched_at: h.watched_at
-                          };
-
-                          // Construct Thumbnail URL manually
+                          // Construct URL
                           const thumb = vid.thumbnail_path 
                              ? `https://ijqulnzypdpprefinynn.supabase.co/storage/v1/object/public/thumbnails/${vid.thumbnail_path}` 
-                             : (vid.external_url || "https://placehold.co/100x56");
+                             : (vid.external_url || null);
 
-                          return {
-                              ...vid,
-                              thumbnail_url: thumb,
-                              watched_at: h.watched_at
-                          };
+                          return { ...vid, thumbnail_url: thumb, watched_at: h.watched_at };
                       });
                   }
 
-                  // Process Forum
-                  const threads = (threadsRes.data || []).map(t => ({ ...t, type: 'thread' }));
-                  const replies = (repliesRes.data || []).map(r => ({ ...r, type: 'reply' }));
-                  const combinedForum = [...threads, ...replies].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                  // 3. Process Forum
+                  const combinedForum = [
+                      ...(threadsRes.data || []).map(t => ({ ...t, type: 'thread' })),
+                      ...(repliesRes.data || []).map(r => ({ ...r, type: 'reply' }))
+                  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
                   setUserDetails({
                       likes: likesRes.data || [],
@@ -412,8 +407,9 @@ export default function AdminPage(props) {
                       forum: combinedForum
                   });
 
-              } catch (err) {
-                  console.error("Error fetching user details:", err);
+              } catch (error) {
+                  console.error("Deep details fetch error:", error);
+                  showToast("Failed to load user details", "error");
               } finally {
                   setLoadingDetails(false);
               }
@@ -421,7 +417,7 @@ export default function AdminPage(props) {
       };
       
       fetchDeepDetails();
-  }, [selected, adminView]); // Removed localVideos dependency
+  }, [selected, adminView]);
 
   // Editor Reset
   useEffect(() => {
@@ -472,12 +468,13 @@ export default function AdminPage(props) {
     
     setLocalVideos([...remainingVideos.slice(0, insertionIndex), ...movedItems, ...remainingVideos.slice(insertionIndex)]);
     setReorderConfirmed(false);
+    setShowReorderModal(true); // Prompt to save
   };
   
   const saveOrder = async () => {
     const reorderPayload = localVideos.map((v, index) => ({ id: v.id, order_index: index }));
-    try { await Promise.resolve(onReorder(reorderPayload)); alert("Order saved."); setReorderConfirmed(false); setShowReorderModal(false); } 
-    catch (err) { console.error("saveOrder failed", err); alert("Failed saving order."); }
+    try { await Promise.resolve(onReorder(reorderPayload)); showToast("Order saved"); setReorderConfirmed(false); setShowReorderModal(false); } 
+    catch (err) { console.error("saveOrder failed", err); showToast("Failed saving order", "error"); }
   };
 
   // Upload/Add
@@ -495,12 +492,14 @@ export default function AdminPage(props) {
       const res = onUpload.length >= 2 ? onUpload({ preventDefault: () => {} }, position) : onUpload();
       await Promise.resolve(res);
       setShowUploadModal(false); setPendingUploadFile(null); setPendingUploadName("");
-    } catch (err) { console.error("header upload failed", err); alert("Upload failed."); }
+      showToast("Upload Started");
+    } catch (err) { console.error("header upload failed", err); showToast("Upload failed", "error"); }
   };
   const submitExternalAdd = async (e) => {
     e.preventDefault();
     const position = Number(extPosition) || 0;
     await onAddExternal(e, position); setShowAddModal(false); setExtPosition(""); 
+    showToast("External link added");
   };
   
   // Toggles Wrapper
@@ -510,7 +509,7 @@ export default function AdminPage(props) {
     const copy = localVideos.slice(); copy[idx] = next; setLocalVideos(copy);
     if (selected?.id === id) setSelected(next);
     try { await Promise.resolve(onTogglePublic(prev)); } 
-    catch (err) { setLocalVideos(localVideos); if (selected?.id === id) setSelected(prev); alert("Failed to toggle public."); }
+    catch (err) { setLocalVideos(localVideos); if (selected?.id === id) setSelected(prev); showToast("Failed to toggle visibility", "error"); }
   };
   const onToggleFeaturedWrapper = async (id) => {
     const idx = localVideos.findIndex((v) => v.id === id); if (idx === -1) return;
@@ -518,7 +517,7 @@ export default function AdminPage(props) {
     const copy = localVideos.slice(); copy[idx] = next; setLocalVideos(copy);
     if (selected?.id === id) setSelected(next);
     try { await Promise.resolve(onToggleFeatured(prev)); } 
-    catch (err) { setLocalVideos(localVideos); if (selected?.id === id) setSelected(prev); alert("Failed to toggle featured."); }
+    catch (err) { setLocalVideos(localVideos); if (selected?.id === id) setSelected(prev); showToast("Failed to toggle feature", "error"); }
   };
 
   // Bulk Actions
@@ -528,16 +527,17 @@ export default function AdminPage(props) {
   const handleResetStats = async (vid) => {
       if(!confirm("Reset metrics to 0?")) return;
       const { error } = await supabase.rpc('admin_reset_video_stats', { vid });
-      if (error) alert("Reset failed (RPC required): " + error.message);
+      if (error) showToast("Reset failed: " + error.message, "error");
       else {
           const updated = { ...selected, view_count: 0, likes_count: 0 };
           setSelected(updated);
           setLocalVideos(prev => prev.map(v => v.id === vid ? updated : v));
+          showToast("Stats reset to zero");
       }
   };
 
   const applyBulk = async (action) => {
-    if (selectedIds.size === 0) { alert("No items selected"); return; }
+    if (selectedIds.size === 0) { showToast("No items selected", "error"); return; }
     if (action === "delete" && !window.confirm(`Delete ${selectedIds.size} item(s)?`)) return;
     
     try {
@@ -554,7 +554,8 @@ export default function AdminPage(props) {
           }
       }
       clearSelection();
-    } catch (err) { console.error("bulk action failed", err); alert("Bulk action failed."); }
+      showToast("Bulk action completed");
+    } catch (err) { console.error("bulk action failed", err); showToast("Bulk action failed", "error"); }
   };
 
   // Block & Role Management
@@ -563,16 +564,16 @@ export default function AdminPage(props) {
       if(!confirm(`Temporarily ${newBlockStatus ? 'block' : 'unblock'} ${user.full_name || 'this user'}?`)) return;
       
       const { error } = await supabase.rpc('admin_toggle_block', { target_id: user.id, block_status: newBlockStatus });
-      if (error) alert("Error toggling block: " + error.message);
-      else { fetchUsers(); if(selected?.id === user.id) setSelected(prev => ({...prev, is_blocked: newBlockStatus})); }
+      if (error) showToast("Error: " + error.message, "error");
+      else { fetchUsers(); if(selected?.id === user.id) setSelected(prev => ({...prev, is_blocked: newBlockStatus})); showToast(newBlockStatus ? "User blocked" : "User unblocked"); }
   };
 
   const handleToggleRole = async (user) => {
       const newRole = user.role === 'admin' ? 'user' : 'admin';
       if(!confirm(`Promote/Demote ${user.full_name} to ${newRole}?`)) return;
       const { error } = await supabase.rpc('admin_toggle_role', { target_id: user.id, new_role: newRole });
-      if (error) alert("Error: " + error.message);
-      else { fetchUsers(); if(selected?.id === user.id) setSelected(prev => ({...prev, role: newRole})); }
+      if (error) showToast("Error: " + error.message, "error");
+      else { fetchUsers(); if(selected?.id === user.id) setSelected(prev => ({...prev, role: newRole})); showToast(`User is now ${newRole}`); }
   };
 
   const handleExportData = async () => {
@@ -581,31 +582,31 @@ export default function AdminPage(props) {
       const blob = new Blob([JSON.stringify({ users: u, videos: v }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `studio_backup_${new Date().toISOString()}.json`; a.click();
+      showToast("Backup downloaded");
   };
 
   const handleForceRefresh = async () => {
-    if (!confirm("⚠️ FORCE RELOAD ALL CLIENTS?\n\nThis will instantly refresh the page for EVERY active user connected to the site. Use this to push critical updates.")) return;
-
+    if (!confirm("⚠️ FORCE RELOAD ALL CLIENTS?\n\nThis will instantly refresh the page for EVERY active user.")) return;
     const { error } = await supabase.rpc('admin_trigger_force_refresh');
-    if (error) alert("Failed to send signal: " + error.message);
-    else alert("Signal sent! All clients will refresh momentarily.");
+    if (error) showToast("Failed to send signal", "error");
+    else showToast("Refresh signal sent to all clients");
 };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
     const { data: { session: adminSession } } = await supabase.auth.getSession();
-    if (!adminSession) return alert("Admin session not found");
+    if (!adminSession) return showToast("Admin session not found", "error");
 
     const { error } = await supabase.auth.signUp({
       email: newUserEmail, password: newUserPass,
       options: { data: { full_name: newName, role: newUserRole } },
     });
 
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
     await supabase.auth.signOut();
     await supabase.auth.setSession({ access_token: adminSession.access_token, refresh_token: adminSession.refresh_token });
     
-    alert("User created successfully");
+    showToast("User created successfully");
     setShowUserModal(false); setNewUserEmail(""); setNewUserPass(""); setNewName(""); setNewUserRole("user");
     if (adminView === "users") fetchUsers();
   };
@@ -613,8 +614,8 @@ export default function AdminPage(props) {
   const handleDeleteUser = async (uid) => {
       if(!confirm("Permanently delete user? This cannot be undone.")) return;
       const { error } = await supabase.rpc('admin_delete_user', { uid });
-      if (error) alert("Delete failed: " + error.message);
-      else { setUsers(prev => prev.filter(u => u.id !== uid)); alert("User deleted."); }
+      if (error) showToast("Delete failed: " + error.message, "error");
+      else { setUsers(prev => prev.filter(u => u.id !== uid)); showToast("User deleted"); }
   };
 
   const handleLoginSubmit = (e) => {
@@ -628,6 +629,7 @@ export default function AdminPage(props) {
   const handleDeleteVideoAndClose = (video) => { 
     if (!window.confirm(`Are you sure you want to delete "${video.title || video.id}"? This cannot be undone.`)) return;
     onDeleteVideo(video); setSelected(null);
+    showToast("Video deleted");
   };
   
   const openEdit = (video) => {
@@ -656,27 +658,29 @@ export default function AdminPage(props) {
       setLocalVideos((prev) => prev.map((p) => (p.id === editingVideo.id ? { ...p, ...payload } : p)));
       if (selected?.id === editingVideo.id) setSelected((s) => (s ? { ...s, ...payload } : s));
       setEditingVideo(null); 
-    } catch (err) { console.error("save edit", err); alert("Failed to save changes."); } 
+      showToast("Metadata saved");
+    } catch (err) { console.error("save edit", err); showToast("Failed to save changes", "error"); } 
     finally { setEditSaving(false); }
   };
 
   const handleMoveVideo = () => {
-    if (!editingVideo || !isSortable) { alert(isSortable ? "No video selected." : "Clear filters first."); return; }
+    if (!editingVideo || !isSortable) { showToast(isSortable ? "No video selected." : "Clear filters first.", "error"); return; }
     const current1BasedIndex = localVideos.findIndex(v => v.id === editingVideo.id) + 1;
     const new1BasedIndex = Number(newPosition);
-    if (isNaN(new1BasedIndex) || new1BasedIndex < 1 || new1BasedIndex > localVideos.length) return alert(`Invalid position.`);
-    if (current1BasedIndex === new1BasedIndex) return alert("Same position.");
+    if (isNaN(new1BasedIndex) || new1BasedIndex < 1 || new1BasedIndex > localVideos.length) return showToast(`Invalid position`, "error");
+    if (current1BasedIndex === new1BasedIndex) return showToast("Same position", "error");
     const targetIndex = new1BasedIndex - 1;
     const videoToMove = localVideos.find(v => v.id === editingVideo.id);
     const listWithoutVideo = localVideos.filter(v => v.id !== editingVideo.id);
     const newVideos = [...listWithoutVideo.slice(0, targetIndex), videoToMove, ...listWithoutVideo.slice(targetIndex)];
-    setLocalVideos(newVideos); setReorderConfirmed(false); setSelected(videoToMove); alert(`Moved locally. Save Order to persist.`);
+    setLocalVideos(newVideos); setReorderConfirmed(false); setSelected(videoToMove); 
+    showToast(`Moved locally. Save Order to persist.`);
   };
 
   const handleThumbnailCaptureClick = async () => {
     if (!selected || !onUpdateThumbnail) return;
-    try { await onUpdateThumbnail(selected, Number(thumbSecond) || 7); setThumbMsg("Capture requested."); }
-    catch (err) { console.error("capture thumbnail", err); setThumbMsg("Capture failed."); }
+    try { await onUpdateThumbnail(selected, Number(thumbSecond) || 7); setThumbMsg("Capture requested."); showToast("Thumbnail captured"); }
+    catch (err) { console.error("capture thumbnail", err); setThumbMsg("Capture failed."); showToast("Capture failed", "error"); }
   };
   const handleThumbFile = (file) => {
     setThumbFile(file || null); setThumbMsg(""); setFilePreview(null);
@@ -686,7 +690,7 @@ export default function AdminPage(props) {
   const handleCustomThumbUpload = async () => {
     if (!thumbFile || !selected) { setThumbMsg("Select image/video."); return; }
     if (typeof onUploadCustomThumbnail === "function") {
-      try { await onUploadCustomThumbnail(selected.id, thumbFile); setThumbMsg("Upload succeeded."); setThumbFile(null); setFilePreview(null); }
+      try { await onUploadCustomThumbnail(selected.id, thumbFile); setThumbMsg("Upload succeeded."); setThumbFile(null); setFilePreview(null); showToast("Thumbnail uploaded"); }
       catch (err) { console.error("onUploadCustomThumbnail failed", err); setThumbMsg("Upload failed."); } return;
     }
     setThumbMsg("onUploadCustomThumbnail not implemented.");
@@ -694,7 +698,7 @@ export default function AdminPage(props) {
   const handleRemoveThumbnail = async () => {
     if (!selected) return;
     if (typeof onRemoveThumbnail === "function") {
-      try { await onRemoveThumbnail(selected.id); setThumbMsg("Thumbnail removed."); }
+      try { await onRemoveThumbnail(selected.id); setThumbMsg("Thumbnail removed."); showToast("Thumbnail removed"); }
       catch (err) { console.error("onRemoveThumbnail failed", err); setThumbMsg("Failed remove."); }
     } else setThumbMsg("onRemoveThumbnail not implemented.");
   };
@@ -722,6 +726,11 @@ export default function AdminPage(props) {
   // MAIN DASHBOARD
   return (
     <main className="h-screen flex flex-col bg-[#020617] text-slate-100 overflow-hidden relative isolate font-sans selection:bg-emerald-500/30">
+      {/* Toast Overlay */}
+      <AnimatePresence>
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </AnimatePresence>
+
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-600/10 blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]" />
@@ -749,7 +758,7 @@ export default function AdminPage(props) {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden main-three-pane-container">
+      <div className="flex-1 flex overflow-hidden main-three-pane-container" ref={containerRef}>
         
         {/* LEFT: LIBRARY */}
         <aside style={{ width: `${leftWidth}%` }} className="flex flex-col bg-slate-950/20 border-r border-white/5 backdrop-blur-sm p-4 overflow-hidden min-w-[220px]">
@@ -770,6 +779,7 @@ export default function AdminPage(props) {
                         <option value="public" className="bg-slate-900">Public</option>
                         <option value="private" className="bg-slate-900">Private</option>
                         <option value="featured" className="bg-slate-900">Featured</option>
+                        <option value="unfeatured" className="bg-slate-900">Normal</option>
                     </select>
                 </div>
             )}
@@ -1262,10 +1272,10 @@ export default function AdminPage(props) {
                             <Download size={20} className="text-blue-400 group-hover:scale-110 transition-transform" />
                         </button>
                         <button onClick={handleForceRefresh} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-left transition-all flex items-center justify-between group">
-    <div><div className="text-xs font-black uppercase">Force Refresh</div><div className="text-[9px] opacity-50">Reload all sessions</div></div>
-    <RefreshCw size={20} className="text-emerald-400 group-hover:rotate-180 transition-transform" />
-</button>
-                        <button onClick={() => alert("Cache cleared")} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-left transition-all">
+                            <div><div className="text-xs font-black uppercase">Force Refresh</div><div className="text-[9px] opacity-50">Reload all sessions</div></div>
+                            <RefreshCw size={20} className="text-emerald-400 group-hover:rotate-180 transition-transform" />
+                        </button>
+                        <button onClick={() => showToast("Cache Cleared")} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-left transition-all">
                             <RefreshCw size={20} className="mb-2 text-blue-400" />
                             <div className="text-xs font-black text-white uppercase">Flush Cache</div>
                             <div className="text-[9px] text-slate-500">Force reload clients</div>
