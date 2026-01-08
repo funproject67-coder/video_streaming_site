@@ -378,23 +378,34 @@ export default function App() {
     }
   }, [videos, selected]);
 
-  /* --- 6. VIEW COUNT HANDLER --- */
+/* --- 6. VIEW COUNT & HISTORY HANDLER --- */
 const handleVideoView = useCallback(async (videoId) => {
-  // 1. Update Database (Calls the SQL function you created)
+  // 1. Update Public View Count (RPC)
   const { error } = await supabase.rpc('increment_video_view', { video_id: videoId });
   
   if (!error) {
-    // 2. Update Local State (Instant UI update without refetching)
+    // Update Local State for View Count
     setVideos(prev => prev.map(v => 
       v.id === videoId ? { ...v, view_count: (v.view_count || 0) + 1 } : v
     ));
     
-    // Update selected video if it is the one currently playing
     if (selected?.id === videoId) {
       setSelected(prev => ({ ...prev, view_count: (prev.view_count || 0) + 1 }));
     }
+
+    // 2. NEW: Record User History (Only if logged in)
+    // This was missing in your file!
+    if (session?.user) {
+        const { error: historyError } = await supabase.from('video_history').upsert({
+            user_id: session.user.id,
+            video_id: videoId,
+            watched_at: new Date().toISOString()
+        }, { onConflict: 'user_id, video_id' });
+
+        if (historyError) console.error("Failed to save history:", historyError);
+    }
   }
-}, [selected]); //
+}, [selected, session]); // <--- IMPORTANT: Ensure 'session' is in the dependency array
 
   /* --- 3. THUMBNAIL OPERATIONS --- */
   const onUpdateThumbnail = async (video, second = 7) => {
