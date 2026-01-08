@@ -4,7 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import VideoPlayer from "./VideoPlayer";
 import { supabase } from "../supabaseClient"; 
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { User, Settings, LogOut, Heart, Bookmark, Shield, X, Camera, Play, Calendar } from "lucide-react";
+import { 
+  User, Settings, LogOut, Heart, Bookmark, Shield, X, Camera, Play, Calendar, 
+  Activity, Clock, FileText, MessageSquare, Trash2 
+} from "lucide-react";
 
 // --- HELPER: COPY TO CLIPBOARD ---
 const handleShare = async (video) => {
@@ -17,232 +20,295 @@ const handleShare = async (video) => {
   }
 };
 
-// --- SUB-COMPONENT: MINI VIDEO CARD ---
-const MiniVideoCard = ({ video, onClick }) => (
-  <button 
-    onClick={() => onClick(video)}
-    className="flex gap-3 p-2 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-emerald-500/30 transition-all w-full text-left group"
-  >
-    <div className="w-24 h-14 bg-black rounded-lg overflow-hidden relative flex-shrink-0">
-        <img src={video.thumbnail_url || "https://placehold.co/600x400/020617/white?text=Preview"} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="" />
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="bg-emerald-500 text-black rounded-full p-1 shadow-lg"><Play size={10} fill="currentColor" /></div>
-        </div>
+// --- SUB-COMPONENTS (Defined FIRST to prevent ReferenceError) ---
+
+const StatBox = ({ label, value }) => (
+    <div className="bg-white/5 border border-white/5 p-4 rounded-2xl text-center flex flex-col justify-center min-h-[90px]">
+        <div className="text-2xl md:text-3xl font-black text-white mb-1">{value}</div>
+        <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">{label}</div>
     </div>
-    <div className="flex-1 min-w-0 flex flex-col justify-center">
-        <h4 className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 truncate transition-colors">{video.title}</h4>
-        <div className="flex items-center gap-2 mt-1">
-            <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{video.category || "General"}</span>
-        </div>
-    </div>
-  </button>
 );
 
-// --- COMPONENT: USER PROFILE MODAL ---
+const HistoryRow = ({ video, onClick }) => (
+    <button onClick={onClick} className="flex items-center gap-4 w-full p-2 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/5 text-left transition-all group">
+        <div className="w-24 h-14 bg-black rounded-lg overflow-hidden flex-shrink-0 relative shadow-md">
+            <img src={video.thumbnail_url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="" />
+        </div>
+        <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 truncate">{video.title}</h4>
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-0.5">{video.category || "Video"}</div>
+        </div>
+    </button>
+);
+
+const ThreadRow = ({ post }) => (
+    <div className="p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+        <div className="flex justify-between items-start mb-2">
+            <span className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-wider">{post.category}</span>
+            <span className="text-[10px] text-slate-500 font-mono">{new Date(post.created_at).toLocaleDateString()}</span>
+        </div>
+        <h4 className="text-sm font-bold text-white line-clamp-1">{post.title}</h4>
+    </div>
+);
+
+const ReplyRow = ({ reply }) => (
+    <div className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors">
+        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mb-2 flex justify-between items-center">
+            <span className="truncate max-w-[70%]">On: <span className="text-slate-300">{reply.forum_threads?.title || "Deleted"}</span></span>
+            <span className="font-mono opacity-50">{new Date(reply.created_at).toLocaleDateString()}</span>
+        </div>
+        <div className="text-xs text-slate-400 pl-3 border-l-2 border-slate-700 italic line-clamp-2" dangerouslySetInnerHTML={{ __html: reply.content }} />
+    </div>
+);
+
+const EmptyState = ({ msg }) => (
+    <div className="flex flex-col items-center justify-center py-12 text-slate-600 gap-3">
+        <div className="text-4xl opacity-50 grayscale">📂</div>
+        <div className="text-xs font-bold uppercase tracking-widest">{msg}</div>
+    </div>
+);
+
+// --- MAIN COMPONENT: USER PROFILE MODAL ---
 const UserProfileModal = ({ session, onClose, likedIds, savedIds, allVideos, onPlayVideo }) => {
-  const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState("overview"); 
+  const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // Data State
+  const [watchHistory, setWatchHistory] = useState([]);
+  const [userThreads, setUserThreads] = useState([]);
+  const [userReplies, setUserReplies] = useState([]);
 
-  // Initialize State from Session
+  // --- FETCH DATA ---
   useEffect(() => {
     if (session?.user) {
         setFullName(session.user.user_metadata?.full_name || "");
         setAvatarUrl(session.user.user_metadata?.avatar_url || "");
+        
+        const fetchHistory = async () => {
+            const { data } = await supabase.from('video_history').select('video_id, watched_at').eq('user_id', session.user.id).order('watched_at', { ascending: false }).limit(50);
+            if(data) {
+                const historyVideos = data.map(h => {
+                    const vid = allVideos.find(v => v.id === h.video_id);
+                    return vid ? { ...vid, watched_at: h.watched_at } : null;
+                }).filter(Boolean);
+                setWatchHistory(historyVideos);
+            }
+        };
+
+        const fetchThreads = async () => {
+            const { data } = await supabase.from('forum_threads').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
+            if(data) setUserThreads(data);
+        };
+
+        const fetchReplies = async () => {
+            const { data } = await supabase.from('forum_posts').select('*, forum_threads(title)').eq('user_id', session.user.id).order('created_at', { ascending: false });
+            if(data) setUserReplies(data);
+        };
+
+        fetchHistory();
+        fetchThreads();
+        fetchReplies();
     }
-  }, [session]);
-
-  // Determine Default Avatar based on Role
-  const role = session?.user?.user_metadata?.role || "user";
-  const defaultAvatar = role === 'admin' 
-    ? "https://placehold.co/150x150/10b981/020617?text=ADMIN" 
-    : `https://placehold.co/150x150/334155/ffffff?text=${encodeURIComponent((fullName?.[0] || "U").toUpperCase())}`;
-
-  const currentAvatar = avatarUrl || defaultAvatar;
-
-  // Filter videos
-  const likedVideos = useMemo(() => allVideos.filter(v => likedIds.includes(v.id)), [allVideos, likedIds]);
-  const savedVideos = useMemo(() => allVideos.filter(v => savedIds.includes(v.id)), [allVideos, savedIds]);
+  }, [session, allVideos]);
 
   const handleUpdateProfile = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({
-      data: { full_name: fullName, avatar_url: avatarUrl }
-    });
-    
+    const { error } = await supabase.auth.updateUser({ data: { full_name: fullName, avatar_url: avatarUrl } });
+    if (error) alert("Error: " + error.message);
+    else window.location.reload(); 
+    setLoading(false);
+  };
+
+  const handleClearHistory = async () => {
+    if (!confirm("Are you sure you want to clear your entire watch history?")) return;
+    const previousHistory = [...watchHistory];
+    setWatchHistory([]);
+    const { error } = await supabase.from('video_history').delete().eq('user_id', session.user.id);
     if (error) {
-      alert("Error updating profile: " + error.message);
-      setLoading(false);
-    } else {
-      window.location.reload(); 
+        alert("Failed to clear history");
+        setWatchHistory(previousHistory);
     }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    onClose();
-  };
+  const role = session?.user?.user_metadata?.role || "user";
+  const defaultAvatar = role === 'admin' ? "https://placehold.co/150x150/10b981/020617?text=ADMIN" : `https://placehold.co/150x150/334155/ffffff?text=${encodeURIComponent((fullName?.[0] || "U").toUpperCase())}`;
+
+  // --- TABS CONFIG ---
+  const tabs = [
+    { id: "overview", label: "Overview", icon: Activity },
+    { id: "history", label: "History", icon: Clock },
+    { id: "threads", label: "Posts", icon: FileText },
+    { id: "replies", label: "Replies", icon: MessageSquare },
+    { id: "likes", label: "Liked", icon: Heart },
+    { id: "saves", label: "Saved", icon: Bookmark },
+  ];
+
+  const likedVideos = useMemo(() => allVideos.filter(v => likedIds.includes(v.id)), [allVideos, likedIds]);
+  const savedVideos = useMemo(() => allVideos.filter(v => savedIds.includes(v.id)), [allVideos, savedIds]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+    // 1. CENTER ALIGNMENT: 'flex items-center justify-center' + 'p-4' ensures it floats in center on all screens
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl">
       <motion.div 
-        initial={{ scale: 0.95, opacity: 0, y: 20 }} 
-        animate={{ scale: 1, opacity: 1, y: 0 }} 
-        exit={{ scale: 0.95, opacity: 0, y: 20 }}
-        className="w-full max-w-2xl bg-[#0B1121] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+        initial={{ y: 20, opacity: 0 }} 
+        animate={{ y: 0, opacity: 1 }} 
+        exit={{ y: 20, opacity: 0 }}
+        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        // 2. COMPACT HEIGHT: 'h-[75vh]' ensures it doesn't cover the whole screen, 'rounded-3xl' for all corners
+        className="w-full max-w-5xl h-[75vh] md:h-[75vh] bg-slate-900 border border-white/10 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden relative"
       >
-        {/* Header Background */}
-        <div className={`h-32 relative border-b border-white/5 flex-shrink-0 ${role === 'admin' ? 'bg-gradient-to-r from-emerald-900/40 via-black to-emerald-900/40' : 'bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800'}`}>
-            <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-white/10 rounded-full text-white transition-all z-20"><X size={18}/></button>
-        </div>
+        {/* === LEFT COLUMN: SIDEBAR === */}
+        <div className="flex-shrink-0 w-full md:w-72 bg-black/20 border-b md:border-b-0 md:border-r border-white/5 z-20 flex flex-col">
+            
+            {/* 1. HEADER & ACTIONS - Reduced padding (p-5) for more compact look */}
+            <div className="p-5 md:p-6 relative">
+                 {/* Close Button (Mobile) */}
+                 <button onClick={onClose} className="absolute top-4 right-4 md:hidden p-2 bg-white/5 rounded-full text-slate-400"><X size={20}/></button>
 
-        {/* Modal Content - Z-Index Fix applied here */}
-        <div className="relative z-10 px-6 md:px-8 pb-8 -mt-12 flex-1 flex flex-col min-h-0">
-            {/* User Header */}
-            <div className="flex flex-col md:flex-row md:items-end gap-4 mb-6">
-                <div className="relative group self-start">
-                    <img 
-                        src={currentAvatar} 
-                        alt="Profile" 
-                        className={`w-24 h-24 md:w-32 md:h-32 rounded-3xl border-4 border-[#0B1121] shadow-xl object-cover bg-slate-800 ${role === 'admin' ? 'ring-2 ring-emerald-500/50' : ''}`}
-                    />
-                    {isEditing && (
-                        <div className="absolute inset-0 bg-black/60 rounded-2xl m-1 flex items-center justify-center text-white/80 border-4 border-transparent backdrop-blur-sm pointer-events-none">
-                            <Camera size={24} />
-                        </div>
-                    )}
-                </div>
-                
-                <div className="flex-1 mb-2">
-                    {isEditing ? (
-                        <div className="space-y-3 animate-in fade-in slide-in-from-left-2 pt-2 md:pt-0">
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1 block mb-1">Display Name</label>
-                                <input 
-                                    value={fullName} 
-                                    onChange={(e) => setFullName(e.target.value)} 
-                                    className="w-full p-2 bg-black/40 border border-white/10 rounded-lg text-white font-bold outline-none focus:border-emerald-500/50 text-sm focus:bg-black/60 transition-colors" 
-                                    placeholder="Enter your name"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1 block mb-1">Avatar Image URL</label>
-                                <input 
-                                    value={avatarUrl} 
-                                    onChange={(e) => setAvatarUrl(e.target.value)} 
-                                    className="w-full p-2 bg-black/40 border border-white/10 rounded-lg text-slate-300 text-xs font-mono outline-none focus:border-emerald-500/50 focus:bg-black/60 transition-colors" 
-                                    placeholder="https://..."
-                                />
-                            </div>
-                            <div className="flex gap-2 pt-1">
-                                <button onClick={handleUpdateProfile} disabled={loading} className="px-6 py-2 bg-emerald-500 text-slate-950 text-xs font-black rounded-lg uppercase tracking-wider hover:bg-emerald-400 shadow-lg shadow-emerald-500/20">
-                                    {loading ? "Saving..." : "Save Changes"}
-                                </button>
-                                <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-white/5 text-slate-400 text-xs font-black rounded-lg uppercase tracking-wider hover:text-white">Cancel</button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">{fullName || "Stream User"}</h2>
-                                <div className="flex items-center gap-2 text-slate-500 text-xs font-bold mt-1">
-                                    {role === 'admin' ? (
-                                        <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 uppercase tracking-wider flex items-center gap-1"><Shield size={10} /> Admin</span>
-                                    ) : (
-                                        <span className="px-2 py-0.5 rounded bg-white/5 border border-white/5 uppercase tracking-wider">User</span>
-                                    )}
-                                    <span>•</span>
-                                    <span>{session.user.email}</span>
+                 <div className="flex flex-row md:flex-col items-center md:items-start gap-4 pr-10 md:pr-0">
+                    <div className="relative group flex-shrink-0">
+                        {/* Smaller avatar on mobile (w-14) */}
+                        <img src={avatarUrl || defaultAvatar} className="w-14 h-14 md:w-24 md:h-24 rounded-2xl bg-slate-800 object-cover ring-2 ring-white/10 shadow-lg" alt="" />
+                        {isEditing && <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center text-white/80"><Camera size={24} /></div>}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0 text-left w-full">
+                        {isEditing ? (
+                            <div className="space-y-2 animate-in fade-in">
+                                <input value={fullName} onChange={e => setFullName(e.target.value)} className="w-full p-2 bg-black/40 rounded border border-white/10 text-xs text-white" placeholder="Name" />
+                                <input value={avatarUrl} onChange={e => setAvatarUrl(e.target.value)} className="w-full p-2 bg-black/40 rounded border border-white/10 text-xs text-white" placeholder="Avatar URL" />
+                                <div className="flex gap-2">
+                                    <button onClick={handleUpdateProfile} disabled={loading} className="flex-1 py-2 bg-emerald-500 text-slate-950 text-[10px] font-bold uppercase rounded hover:bg-emerald-400">{loading ? "..." : "Save"}</button>
+                                    <button onClick={() => setIsEditing(false)} className="flex-1 py-2 bg-white/10 text-white text-[10px] font-bold uppercase rounded">Cancel</button>
                                 </div>
                             </div>
-                            <button onClick={() => setIsEditing(true)} className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all" title="Edit Profile">
-                                <Settings size={16} />
-                            </button>
-                        </div>
-                    )}
-                </div>
+                        ) : (
+                            <div className="w-full">
+                                <h2 className="text-lg md:text-xl font-black text-white truncate">{fullName || "Stream User"}</h2>
+                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3 md:mb-4">{role}</div>
+                                
+                                <div className="grid grid-cols-2 gap-2 w-full">
+                                    <button onClick={() => setIsEditing(true)} className="px-3 py-2 bg-white/5 border border-white/5 rounded-lg text-[10px] md:text-xs font-bold text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-2 hover:bg-white/10">
+                                        <Settings size={14} /> EDIT
+                                    </button>
+                                    <button onClick={async () => { await supabase.auth.signOut(); onClose(); }} className="px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] md:text-xs font-bold text-rose-500 hover:bg-rose-500/20 transition-colors flex items-center justify-center gap-2">
+                                        <LogOut size={14} /> LOGOUT
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                 </div>
             </div>
 
-            {/* Navigation Tabs */}
-            {!isEditing && (
-                <div className="flex gap-1 p-1 bg-white/5 rounded-xl mb-6 flex-shrink-0">
-                    {["overview", "likes", "saves"].map(tab => (
-                        <button 
-                            key={tab} 
-                            onClick={() => setActiveTab(tab)}
-                            className={`flex-1 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab ? "bg-emerald-500 text-slate-950 shadow-lg" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
-                        >
-                            {tab === "likes" ? "Liked" : tab === "saves" ? "Watchlist" : "Overview"}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Content Area */}
-            {!isEditing && (
-                <div className="flex-1 overflow-y-auto custom-scrollbar min-h-[200px]">
-                    {activeTab === "overview" && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 flex flex-col items-center justify-center gap-2 group hover:border-rose-500/30 transition-colors">
-                                    <div className="p-3 bg-rose-500/10 rounded-full text-rose-500 group-hover:scale-110 transition-transform"><Heart size={20} /></div>
-                                    <div className="text-center">
-                                        <span className="block text-2xl font-black text-white">{likedIds.length}</span>
-                                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Videos Liked</span>
-                                    </div>
-                                </div>
-                                <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 flex flex-col items-center justify-center gap-2 group hover:border-emerald-500/30 transition-colors">
-                                    <div className="p-3 bg-emerald-500/10 rounded-full text-emerald-500 group-hover:scale-110 transition-transform"><Bookmark size={20} /></div>
-                                    <div className="text-center">
-                                        <span className="block text-2xl font-black text-white">{savedIds.length}</span>
-                                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Saved for Later</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="p-5 rounded-2xl bg-slate-900/30 border border-white/5">
-                                <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Calendar size={14} className="text-slate-500" /> Account Details
-                                </h3>
-                                <div className="space-y-3 text-xs font-medium text-slate-400">
-                                    <div className="flex justify-between border-b border-white/5 pb-2">
-                                        <span>Member Since</span>
-                                        <span className="text-white">{new Date(session.user.created_at).toLocaleDateString()}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-white/5 pb-2">
-                                        <span>Last Sign In</span>
-                                        <span className="text-white">{new Date(session.user.last_sign_in_at).toLocaleDateString()}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Provider</span>
-                                        <span className="text-white capitalize">{session.user.app_metadata.provider || "Email"}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button onClick={handleSignOut} className="w-full py-4 rounded-xl border border-rose-500/20 text-rose-500/80 font-bold text-xs uppercase tracking-widest hover:bg-rose-500/10 hover:text-rose-500 transition-all flex items-center justify-center gap-2">
-                                <LogOut size={16} /> Sign Out
+            {/* 2. NAVIGATION GRID - Compact padding */}
+            <div className="p-4 md:p-6 pt-0 md:pt-0 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-3 md:grid-cols-1 gap-2">
+                    {tabs.map((tab) => {
+                        const Icon = tab.icon;
+                        const active = activeTab === tab.id;
+                        return (
+                            <button 
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`
+                                    flex flex-col md:flex-row items-center md:gap-4 p-2 md:p-3 rounded-xl transition-all border
+                                    ${active ? "bg-emerald-500 text-slate-950 shadow-lg border-emerald-500" : "bg-white/5 md:bg-transparent text-slate-400 border-transparent hover:bg-white/5 hover:text-white"}
+                                `}
+                            >
+                                <Icon size={18} className={active ? "text-slate-950" : "text-slate-500 md:text-slate-400 group-hover:text-white"} />
+                                <span className="text-[9px] md:text-xs font-black uppercase tracking-wider mt-1 md:mt-0">{tab.label}</span>
                             </button>
-                        </div>
-                    )}
-
-                    {(activeTab === "likes" || activeTab === "saves") && (
-                        <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2">
-                            {(activeTab === "likes" ? likedVideos : savedVideos).length === 0 ? (
-                                <div className="text-center py-10 text-slate-500 text-xs font-bold uppercase tracking-widest">
-                                    {activeTab === "likes" ? "No liked videos yet" : "Your watchlist is empty"}
-                                </div>
-                            ) : (
-                                (activeTab === "likes" ? likedVideos : savedVideos).map(video => (
-                                    <MiniVideoCard key={video.id} video={video} onClick={(v) => { onClose(); onPlayVideo(v); }} />
-                                ))
-                            )}
-                        </div>
-                    )}
+                        );
+                    })}
                 </div>
-            )}
+            </div>
+        </div>
+
+        {/* === RIGHT COLUMN: CONTENT === */}
+        <div className="flex-1 bg-slate-900/50 relative flex flex-col min-h-0">
+            {/* Desktop Close Button */}
+            <button onClick={onClose} className="hidden md:flex absolute top-6 right-6 p-2 bg-white/5 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-all z-10 items-center justify-center">
+                <X size={20}/>
+            </button>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-5 md:p-10 pb-20 md:pb-10">
+                <div className="mb-6 md:mb-8">
+                    <h1 className="text-2xl md:text-4xl font-black text-white uppercase tracking-tighter">{activeTab.replace('_', ' ')}</h1>
+                    <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Manage your activity</p>
+                </div>
+
+                {/* --- TAB: OVERVIEW --- */}
+                {activeTab === 'overview' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                            <StatBox label="Watched" value={watchHistory.length} />
+                            <StatBox label="Posts" value={userThreads.length} />
+                            <StatBox label="Replies" value={userReplies.length} />
+                            <StatBox label="Likes" value={likedIds.length} />
+                        </div>
+                        {watchHistory.length > 0 && (
+                            <div>
+                                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock size={14}/> Jump Back In</h3>
+                                <div className="space-y-3">
+                                    {watchHistory.slice(0, 3).map((video, i) => (
+                                        <HistoryRow key={i} video={video} onClick={() => { onClose(); onPlayVideo(video); }} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* --- TAB: HISTORY --- */}
+                {activeTab === 'history' && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                        {watchHistory.length > 0 && (
+                            <div className="flex justify-end">
+                                <button 
+                                    onClick={handleClearHistory} 
+                                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[10px] font-bold uppercase tracking-wider hover:bg-rose-500/20 transition-colors"
+                                >
+                                    <Trash2 size={14} /> Clear History
+                                </button>
+                            </div>
+                        )}
+                        <div className="space-y-3">
+                            {watchHistory.length === 0 && <EmptyState msg="No history yet" />}
+                            {watchHistory.map((video, i) => (
+                                <HistoryRow key={i} video={video} onClick={() => { onClose(); onPlayVideo(video); }} />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- OTHER TABS --- */}
+                {activeTab === 'threads' && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                        {userThreads.length === 0 && <EmptyState msg="No posts yet" />}
+                        {userThreads.map(post => <ThreadRow key={post.id} post={post} />)}
+                    </div>
+                )}
+
+                {activeTab === 'replies' && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                        {userReplies.length === 0 && <EmptyState msg="No replies yet" />}
+                        {userReplies.map(reply => <ReplyRow key={reply.id} reply={reply} />)}
+                    </div>
+                )}
+
+                {(activeTab === 'likes' || activeTab === 'saves') && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                        {(activeTab === 'likes' ? likedVideos : savedVideos).length === 0 && <EmptyState msg="List is empty" />}
+                        {(activeTab === 'likes' ? likedVideos : savedVideos).map(video => (
+                            <HistoryRow key={video.id} video={video} onClick={() => { onClose(); onPlayVideo(video); }} />
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
       </motion.div>
     </div>
