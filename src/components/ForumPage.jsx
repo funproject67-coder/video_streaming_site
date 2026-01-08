@@ -158,10 +158,16 @@ export default function ForumPage({ isAdminAuthed, session, onOpenAuth }) {
 
   const fetchSingleThread = useCallback(async (id) => {
       const { data, error } = await supabase.from("forum_threads").select("*").eq("id", id).single();
+      
       if (data) {
-          supabase.rpc("increment_thread_view", { thread_id: id });
+          // 1. Trigger the database update and Log the result
+          const { error: rpcError } = await supabase.rpc("increment_thread_view", { thread_id: id });
+          if (rpcError) console.error("View Count RPC Error:", rpcError);
+
+          // 2. Optimistic UI update (shows +1 immediately)
           setActiveThread({ ...data, view_count: (data.view_count || 0) + 1 });
       } else if (error) {
+          console.error("Fetch Thread Error:", error);
           navigate("/forum");
       }
   }, [navigate]);
