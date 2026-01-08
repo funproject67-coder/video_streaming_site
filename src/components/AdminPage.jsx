@@ -8,7 +8,7 @@ import {
   Users, Film, Terminal, Trash2, RefreshCw, Shield, 
   Search, Plus, Save, MoreHorizontal, UserX, UserCheck, X, Upload, Link as LinkIcon, Copy, Calendar,
   Heart, Bookmark, MessageSquare, Activity, FileText, Lock, Unlock, Download, TrendingUp,
-  Globe, EyeOff, UserPlus, Settings
+  Globe, EyeOff, UserPlus, Settings, Clock, Play
 } from "lucide-react";
 
 // --- SKELETON LOADER FOR LIBRARY ---
@@ -176,12 +176,12 @@ export default function AdminPage(props) {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [systemStats, setSystemStats] = useState({ users: 0, videos: 0, views: 0 });
   
-  // --- NEW: SITE ACCESS CONTROL STATE ---
-  const [siteMode, setSiteMode] = useState("open"); // 'open' | 'login' | 'invite'
+  // --- SITE ACCESS CONTROL STATE ---
+  const [siteMode, setSiteMode] = useState("open"); 
   const [updatingMode, setUpdatingMode] = useState(false);
 
   // --- USER DETAIL STATE ---
-  const [userDetails, setUserDetails] = useState({ likes: [], saves: [], forum: [] });
+  const [userDetails, setUserDetails] = useState({ likes: [], saves: [], forum: [], history: [] }); // Added history
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   // --- Local State ---
@@ -207,7 +207,6 @@ export default function AdminPage(props) {
   const [pendingUploadFile, setPendingUploadFile] = useState(null);
   const [pendingUploadName, setPendingUploadName] = useState("");
 
-  // New User Form
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPass, setNewUserPass] = useState("");
   const [newName, setNewName] = useState("");
@@ -218,14 +217,13 @@ export default function AdminPage(props) {
   const [filePreview, setFilePreview] = useState(null);
   const [thumbMsg, setThumbMsg] = useState("");
   
-  // Separate Tab States for Media and User View
   const mediaTabs = useTabState('metadata');
   const userTabs = useTabState('profile');
   
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedIds, setSelectedIds] = useState(new Set());
 
-  // Resizer State
+  // Resizer
   const [leftWidth, setLeftWidth] = useState(30); 
   const [rightWidth, setRightWidth] = useState(30);
   const [isResizing, setIsResizing] = useState(false);
@@ -299,25 +297,22 @@ export default function AdminPage(props) {
       setLoadingUsers(false);
   }, []);
 
-  // Fetch System Stats & Site Mode
-  // --- Updated Fetch System Stats & Site Mode ---
-const fetchStats = useCallback(async () => {
+  // Fetch Stats
+  const fetchStats = useCallback(async () => {
     const { data, error } = await supabase.rpc('admin_get_stats');
     if (!error && data) {
         setSystemStats(data);
-        
-        // This line ensures the UI buttons highlight the CORRECT mode on load
         if (data.site_mode) {
             setSiteMode(data.site_mode);
         }
     }
-}, []);
+  }, []);
+
   useEffect(() => { 
       if (adminView === 'users') fetchUsers();
       if (showSystemModal) fetchStats();
   }, [adminView, showSystemModal, fetchUsers, fetchStats]);
 
-  // --- ACCESS CONTROL HANDLER ---
   const updateSiteMode = async (mode) => {
       setUpdatingMode(true);
       const { error } = await supabase.rpc('admin_set_site_mode', { new_mode: mode });
@@ -329,7 +324,7 @@ const fetchStats = useCallback(async () => {
       setUpdatingMode(false);
   };
 
-  // --- FETCH DEEP USER DETAILS ---
+  // --- FETCH DEEP USER DETAILS (Updated for History) ---
   useEffect(() => {
       const fetchDeepDetails = async () => {
           if (adminView === 'users' && selected) {
@@ -345,6 +340,13 @@ const fetchStats = useCallback(async () => {
                     .eq('user_id', selected.id)
                     .limit(20);
               
+              // New: Fetch Watch History
+              const historyPromise = supabase.from('video_history')
+                    .select('video_id, watched_at')
+                    .eq('user_id', selected.id)
+                    .order('watched_at', { ascending: false })
+                    .limit(30);
+
               const threadsPromise = supabase.from('forum_threads')
                     .select('id, created_at, title, content, view_count')
                     .eq('user_id', selected.id)
@@ -357,9 +359,15 @@ const fetchStats = useCallback(async () => {
                     .order('created_at', { ascending: false })
                     .limit(10);
 
-              const [likesRes, savesRes, threadsRes, repliesRes] = await Promise.all([
-                  likesPromise, savesPromise, threadsPromise, repliesPromise
+              const [likesRes, savesRes, historyRes, threadsRes, repliesRes] = await Promise.all([
+                  likesPromise, savesPromise, historyPromise, threadsPromise, repliesPromise
               ]);
+
+              // Process History to match local videos for details
+              const historyData = (historyRes.data || []).map(h => {
+                  const vidDetails = localVideos.find(v => v.id === h.video_id);
+                  return vidDetails ? { ...vidDetails, watched_at: h.watched_at } : null;
+              }).filter(Boolean);
 
               const threads = (threadsRes.data || []).map(t => ({ ...t, type: 'thread' }));
               const replies = (repliesRes.data || []).map(r => ({ ...r, type: 'reply' }));
@@ -371,6 +379,7 @@ const fetchStats = useCallback(async () => {
               setUserDetails({
                   likes: likesRes.data || [],
                   saves: savesRes.data || [],
+                  history: historyData, // Store mapped history
                   forum: combinedForum
               });
               setLoadingDetails(false);
@@ -378,7 +387,7 @@ const fetchStats = useCallback(async () => {
       };
       
       fetchDeepDetails();
-  }, [selected, adminView]);
+  }, [selected, adminView, localVideos]);
 
   // Editor Reset
   useEffect(() => {
@@ -387,7 +396,7 @@ const fetchStats = useCallback(async () => {
     if (selected && adminView === 'users') userTabs.setActiveTab('profile');
   }, [selected?.id, adminView]);
 
-  // Filtering
+  // Filtering logic
   const { total, filtered, isSortable } = useMemo(() => {
     const total = Array.isArray(rawVideos) ? rawVideos.length : 0;
     const q = (search || "").trim().toLowerCase();
@@ -995,8 +1004,33 @@ const fetchStats = useCallback(async () => {
                         <div className="space-y-4">
                             {loadingDetails ? <div className="text-center py-10 text-xs text-slate-500">Loading history...</div> : (
                                 <>
+                                    {/* WATCH HISTORY */}
                                     <div>
-                                        <h4 className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Heart size={10} /> Liked Videos</h4>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2"><Clock size={10} /> Watch History</h4>
+                                        {userDetails.history.length > 0 ? (
+                                            <div className="space-y-1">
+                                                {userDetails.history.map((video, i) => (
+                                                    <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/5 flex gap-2 items-center hover:bg-white/10 transition-colors">
+                                                        <div className="relative w-10 h-6 flex-shrink-0">
+                                                            <img src={video.thumbnail_url || "https://placehold.co/100x56"} className="w-full h-full rounded bg-black object-cover" alt="" />
+                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Play size={8} className="text-white fill-current" /></div>
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="text-[10px] text-white truncate font-bold">{video.title || "Deleted Video"}</div>
+                                                            <div className="text-[8px] text-slate-500 flex justify-between">
+                                                                <span>{new Date(video.watched_at).toLocaleDateString()}</span>
+                                                                <span>{new Date(video.watched_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : <div className="text-[9px] text-slate-600 italic p-2 border border-white/5 rounded-lg text-center">No history recorded.</div>}
+                                    </div>
+
+                                    {/* LIKED VIDEOS */}
+                                    <div>
+                                        <h4 className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 flex items-center gap-2 mt-4"><Heart size={10} /> Liked Videos</h4>
                                         {userDetails.likes.length > 0 ? (
                                             <div className="space-y-1">
                                                 {userDetails.likes.map((like, i) => {
@@ -1014,8 +1048,10 @@ const fetchStats = useCallback(async () => {
                                                     );
                                                 })}
                                             </div>
-                                        ) : <div className="text-[9px] text-slate-600 italic p-2">No likes recorded.</div>}
+                                        ) : <div className="text-[9px] text-slate-600 italic p-2 border border-white/5 rounded-lg text-center">No likes recorded.</div>}
                                     </div>
+
+                                    {/* SAVED VIDEOS */}
                                     <div>
                                         <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2 mt-4"><Bookmark size={10} /> Watchlist</h4>
                                         {userDetails.saves.length > 0 ? (
@@ -1035,7 +1071,7 @@ const fetchStats = useCallback(async () => {
                                                     );
                                                 })}
                                             </div>
-                                        ) : <div className="text-[9px] text-slate-600 italic p-2">Watchlist empty.</div>}
+                                        ) : <div className="text-[9px] text-slate-600 italic p-2 border border-white/5 rounded-lg text-center">Watchlist empty.</div>}
                                     </div>
                                 </>
                             )}
@@ -1073,7 +1109,7 @@ const fetchStats = useCallback(async () => {
                                                 </div>
                                             ))}
                                         </div>
-                                    ) : <div className="text-[9px] text-slate-600 italic p-2">No forum activity.</div>}
+                                    ) : <div className="text-[9px] text-slate-600 italic p-2 border border-white/5 rounded-lg text-center">No forum activity.</div>}
                                 </>
                             )}
                         </div>
@@ -1137,7 +1173,7 @@ const fetchStats = useCallback(async () => {
         {showSystemModal && (
             <ModalBase title="System Terminal & Security" onClose={() => setShowSystemModal(false)} size="max-w-2xl">
                 <div className="space-y-6">
-                    {/* NEW: SITE ACCESS CONTROL PANEL */}
+                    {/* SITE ACCESS CONTROL PANEL */}
                     <div className="p-1 bg-white/5 rounded-2xl border border-white/10">
                         <div className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 mb-2 flex items-center gap-2">
                             <Shield size={12} className="text-emerald-500" /> Site Visibility & Access Modes
