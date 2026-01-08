@@ -378,6 +378,24 @@ export default function App() {
     }
   }, [videos, selected]);
 
+  /* --- 6. VIEW COUNT HANDLER --- */
+const handleVideoView = useCallback(async (videoId) => {
+  // 1. Update Database (Calls the SQL function you created)
+  const { error } = await supabase.rpc('increment_video_view', { video_id: videoId });
+  
+  if (!error) {
+    // 2. Update Local State (Instant UI update without refetching)
+    setVideos(prev => prev.map(v => 
+      v.id === videoId ? { ...v, view_count: (v.view_count || 0) + 1 } : v
+    ));
+    
+    // Update selected video if it is the one currently playing
+    if (selected?.id === videoId) {
+      setSelected(prev => ({ ...prev, view_count: (prev.view_count || 0) + 1 }));
+    }
+  }
+}, [selected]); //
+
   /* --- 3. THUMBNAIL OPERATIONS --- */
   const onUpdateThumbnail = async (video, second = 7) => {
     try {
@@ -636,6 +654,7 @@ export default function App() {
                             onOpenAuth={() => setShowAuthModal(true)}
                             search={viewerSearch}
                             setSearch={setViewerSearch}
+                            onVideoPlayed={handleVideoView}
                         />
                     } 
                 />
