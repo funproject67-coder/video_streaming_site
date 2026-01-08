@@ -324,70 +324,104 @@ export default function AdminPage(props) {
       setUpdatingMode(false);
   };
 
-  // --- FETCH DEEP USER DETAILS (Updated for History) ---
+  // --- FETCH DEEP USER DETAILS (Robust Fix) ---
   useEffect(() => {
       const fetchDeepDetails = async () => {
           if (adminView === 'users' && selected) {
               setLoadingDetails(true);
               
-              const likesPromise = supabase.from('video_likes')
-                    .select('created_at, videos!video_likes_video_id_fkey(id, title, thumbnail_path)')
-                    .eq('user_id', selected.id)
-                    .limit(20);
+              try {
+                  // 1. Fetch Likes
+                  const likesPromise = supabase.from('video_likes')
+                      .select('created_at, videos!video_likes_video_id_fkey(id, title, thumbnail_path)')
+                      .eq('user_id', selected.id).limit(20);
+                      
+                  // 2. Fetch Saves
+                  const savesPromise = supabase.from('video_saves')
+                      .select('created_at, videos!video_saves_video_id_fkey(id, title, thumbnail_path)')
+                      .eq('user_id', selected.id).limit(20);
                   
-              const savesPromise = supabase.from('video_saves')
-                    .select('created_at, videos!video_saves_video_id_fkey(id, title, thumbnail_path)')
-                    .eq('user_id', selected.id)
-                    .limit(20);
-              
-              // New: Fetch Watch History
-              const historyPromise = supabase.from('video_history')
-                    .select('video_id, watched_at')
-                    .eq('user_id', selected.id)
-                    .order('watched_at', { ascending: false })
-                    .limit(30);
+                  // 3. Fetch History IDs (Step 1: Get the IDs first)
+                  const historyPromise = supabase.from('video_history')
+                      .select('video_id, watched_at')
+                      .eq('user_id', selected.id)
+                      .order('watched_at', { ascending: false })
+                      .limit(30);
 
-              const threadsPromise = supabase.from('forum_threads')
-                    .select('id, created_at, title, content, view_count')
-                    .eq('user_id', selected.id)
-                    .order('created_at', { ascending: false })
-                    .limit(10);
+                  // 4. Fetch Forum Data
+                  const threadsPromise = supabase.from('forum_threads')
+                      .select('id, created_at, title, content, view_count')
+                      .eq('user_id', selected.id).order('created_at', { ascending: false }).limit(10);
 
-              const repliesPromise = supabase.from('forum_posts')
-                    .select('id, created_at, content, forum_threads!forum_posts_thread_id_fkey(id, title)')
-                    .eq('user_id', selected.id)
-                    .order('created_at', { ascending: false })
-                    .limit(10);
+                  const repliesPromise = supabase.from('forum_posts')
+                      .select('id, created_at, content, forum_threads!forum_posts_thread_id_fkey(id, title)')
+                      .eq('user_id', selected.id).order('created_at', { ascending: false }).limit(10);
 
-              const [likesRes, savesRes, historyRes, threadsRes, repliesRes] = await Promise.all([
-                  likesPromise, savesPromise, historyPromise, threadsPromise, repliesPromise
-              ]);
+                  const [likesRes, savesRes, historyRes, threadsRes, repliesRes] = await Promise.all([
+                      likesPromise, savesPromise, historyPromise, threadsPromise, repliesPromise
+                  ]);
 
-              // Process History to match local videos for details
-              const historyData = (historyRes.data || []).map(h => {
-                  const vidDetails = localVideos.find(v => v.id === h.video_id);
-                  return vidDetails ? { ...vidDetails, watched_at: h.watched_at } : null;
-              }).filter(Boolean);
+                  // --- FIX: MANUALLY FETCH HISTORY VIDEO DETAILS ---
+                  let finalHistory = [];
+                  const rawHistory = historyRes.data || [];
+                  
+                  if (rawHistory.length > 0) {
+                      // Extract unique Video IDs
+                      const videoIds = rawHistory.map(h => h.video_id);
+                      
+                      // Fetch details for these specific IDs from DB (Bypassing localVideos)
+                      const { data: videoDetails } = await supabase
+                          .from('videos')
+                          .select('id, title, thumbnail_path, external_url')
+                          .in('id', videoIds);
+                      
+                      // Merge history timestamp with video details
+                      finalHistory = rawHistory.map(h => {
+                          const vid = videoDetails?.find(v => v.id === h.video_id);
+                          
+                          // Handle deleted videos gracefully
+                          if (!vid) return {
+                              id: h.video_id,
+                              title: "Deleted Asset",
+                              thumbnail_url: "https://placehold.co/100x56?text=Deleted",
+                              watched_at: h.watched_at
+                          };
 
-              const threads = (threadsRes.data || []).map(t => ({ ...t, type: 'thread' }));
-              const replies = (repliesRes.data || []).map(r => ({ ...r, type: 'reply' }));
-              
-              const combinedForum = [...threads, ...replies].sort((a, b) => 
-                  new Date(b.created_at) - new Date(a.created_at)
-              );
+                          // Construct Thumbnail URL manually
+                          const thumb = vid.thumbnail_path 
+                             ? `https://ijqulnzypdpprefinynn.supabase.co/storage/v1/object/public/thumbnails/${vid.thumbnail_path}` 
+                             : (vid.external_url || "https://placehold.co/100x56");
 
-              setUserDetails({
-                  likes: likesRes.data || [],
-                  saves: savesRes.data || [],
-                  history: historyData, // Store mapped history
-                  forum: combinedForum
-              });
-              setLoadingDetails(false);
+                          return {
+                              ...vid,
+                              thumbnail_url: thumb,
+                              watched_at: h.watched_at
+                          };
+                      });
+                  }
+
+                  // Process Forum
+                  const threads = (threadsRes.data || []).map(t => ({ ...t, type: 'thread' }));
+                  const replies = (repliesRes.data || []).map(r => ({ ...r, type: 'reply' }));
+                  const combinedForum = [...threads, ...replies].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+                  setUserDetails({
+                      likes: likesRes.data || [],
+                      saves: savesRes.data || [],
+                      history: finalHistory, 
+                      forum: combinedForum
+                  });
+
+              } catch (err) {
+                  console.error("Error fetching user details:", err);
+              } finally {
+                  setLoadingDetails(false);
+              }
           }
       };
       
       fetchDeepDetails();
-  }, [selected, adminView, localVideos]);
+  }, [selected, adminView]); // Removed localVideos dependency
 
   // Editor Reset
   useEffect(() => {
