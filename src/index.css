@@ -3,108 +3,108 @@
 @tailwind utilities;
 
 /* =========================================================
-   Global Reset & Box Model
-   ========================================================= */
+   Global Reset & Box Model
+   ========================================================= */
 html,
 body,
 #root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  box-sizing: border-box;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 *,
 *::before,
 *::after {
-  box-sizing: inherit;
+  box-sizing: inherit;
 }
 
 /* =========================================================
-   Base Theme (Dark-first)
-   ========================================================= */
+   Base Theme (Dark-first)
+   ========================================================= */
 :root {
-  /* typography */
-  font-family: system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
-    "Helvetica Neue", sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* typography */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
+    "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
 
-  /* color system */
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.92);
-  background-color: #030712;
+  /* color system */
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.92);
+  background-color: #030712;
 
-  /* rendering */
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* rendering */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: #030712;
-  color: inherit;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #030712;
+  color: inherit;
 }
 
 /* =========================================================
-   Base Elements
-   ========================================================= */
+   Base Elements
+   ========================================================= */
 a {
-  font-weight: 500;
-  color: #5eead4;
-  text-decoration: none;
+  font-weight: 500;
+  color: #5eead4;
+  text-decoration: none;
 }
 a:hover {
-  color: #34d399;
+  color: #34d399;
 }
 
 button {
-  font-family: inherit;
-  cursor: pointer;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
 }
 
 /* =========================================================
-   Scrollbars (subtle, dark)
-   ========================================================= */
+   Scrollbars (subtle, dark)
+   ========================================================= */
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 /* =========================================================
-   Utility Safety Helpers
-   ========================================================= */
+   Utility Safety Helpers
+   ========================================================= */
 main,
 .app-root {
-  max-width: 100%;
-  overflow-x: hidden;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Optional safe-area helper (mobile notches)
-   usage: class="safe-bottom"
+   usage: class="safe-bottom"
 */
 .safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
 }
