@@ -3,184 +3,108 @@
 @tailwind utilities;
 
 /* =========================================================
-   1. CORE DEFAULTS & RESET
-   ========================================================= */
-:root {
-  /* Centralize theme colors for CSS-only manipulations */
-  --brand-primary: #10b981; /* Emerald 500 */
-  --brand-bg: #020617;      /* Slate 950 */
-  --brand-surface: #0f172a; /* Slate 900 */
-}
-
+   Global Reset & Box Model
+   ========================================================= */
 html,
 body,
 #root {
-  width: 100%;
-  min-height: 100%;
-  margin: 0;
-  padding: 0;
-  background-color: var(--brand-bg);
-  color: #f8fafc;
-  
-  /* Typography Enhancements */
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  
-  /* Mobile Scroll Fix: prevents "bounce" on some OS */
-  overscroll-behavior-y: none;
-  
-  /* Mobile Height Fix: uses dynamic viewport height */
-  min-height: 100dvh;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
 }
 
 /* =========================================================
-   2. CUSTOM SCROLLBARS (Global & Utility)
-   ========================================================= */
-/* Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+   Base Theme (Dark-first)
+   ========================================================= */
+:root {
+  /* typography */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
+    "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* color system */
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.92);
+  background-color: #030712;
+
+  /* rendering */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Chrome, Edge, Safari */
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #030712;
+  color: inherit;
+}
+
+/* =========================================================
+   Base Elements
+   ========================================================= */
+a {
+  font-weight: 500;
+  color: #5eead4;
+  text-decoration: none;
+}
+a:hover {
+  color: #34d399;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
+}
+
+/* =========================================================
+   Scrollbars (subtle, dark)
+   ========================================================= */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
 }
-
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background-color: #334155; /* Slate 700 */
-  border-radius: 9999px;
-  border: 2px solid transparent; /* Creates padding effect */
-  background-clip: content-box;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--brand-primary);
-}
-
-/* Specific class for internal scrollable areas (like your Modals) */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #475569;
+  background: rgba(255, 255, 255, 0.28);
 }
 
 /* =========================================================
-   3. GLOBAL UX ENHANCEMENTS
-   ========================================================= */
-
-/* High-tech Text Selection */
-::selection {
-  background-color: rgba(16, 185, 129, 0.3); /* Emerald with opacity */
-  color: #5eead4;
-  text-shadow: 0 0 5px rgba(16, 185, 129, 0.5);
+   Utility Safety Helpers
+   ========================================================= */
+main,
+.app-root {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
-/* Focus States for Accessibility without ugly outlines */
-:focus-visible {
-  outline: 2px solid var(--brand-primary);
-  outline-offset: 2px;
-}
-
-/* =========================================================
-   4. FORM ELEMENTS & INPUTS
-   ========================================================= */
-
-/* Remove the ugly white background Chrome adds to autofilled inputs */
-input:-webkit-autofill,
-input:-webkit-autofill:hover, 
-input:-webkit-autofill:focus, 
-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px #0f172a inset !important; /* Matches Slate 900 */
-  -webkit-text-fill-color: white !important;
-  caret-color: white;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
-/* Range Slider Reset (for Video Player controls if needed) */
-input[type=range] {
-  -webkit-appearance: none;
-  background: transparent;
-}
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-}
-input[type=range]:focus {
-  outline: none;
-}
-
-/* =========================================================
-   5. UTILITIES & ANIMATIONS
-   ========================================================= */
-
-@layer utilities {
-  /* Glassmorphism Utility */
-  .glass {
-    @apply bg-slate-900/70 backdrop-blur-xl border border-white/10;
-  }
-
-  /* Text overflow safety */
-  .text-balance {
-    text-wrap: balance;
-  }
-}
-
-/* Manually defining the Tailwind-Animate classes used in your JSX
-   (In case you don't have the tailwindcss-animate plugin installed)
+/* Optional safe-area helper (mobile notches)
+   usage: class="safe-bottom"
 */
-@keyframes enter {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes exit {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.95); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideInFromBottom {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-/* Class hooks for the animations */
-.animate-in {
-  animation: enter 0.2s ease-out;
-}
-.fade-in {
-  animation-name: fadeIn;
-}
-.slide-in-from-bottom-2 {
-  animation-name: slideInFromBottom;
-}
-
-/* =========================================================
-   6. RESPONSIVE HELPERS
-   ========================================================= */
-
-/* Hides scrollbar but allows scrolling */
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* Safe area padding for iPhones with notches/home bars */
-.safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
