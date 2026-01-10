@@ -2,295 +2,109 @@
 @tailwind components;
 @tailwind utilities;
 
-/* =====================================================
-   DESIGN SYSTEM — TOKENS
-   ===================================================== */
-:root {
-  color-scheme: dark;
-
-  /* Backgrounds */
-  --bg-root: #020617;
-  --bg-elevated: #0b1121;
-  --bg-panel: rgba(15, 23, 42, 0.85);
-  --bg-soft: rgba(255, 255, 255, 0.04);
-
-  /* Borders */
-  --border-muted: rgba(255, 255, 255, 0.08);
-  --border-active: rgba(255, 255, 255, 0.18);
-
-  /* Text */
-  --text-primary: #e5e7eb;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-
-  /* Accent */
-  --accent: #10b981;
-  --accent-soft: rgba(16, 185, 129, 0.25);
-
-  /* Status */
-  --danger: #f43f5e;
-  --warning: #f59e0b;
-
-  /* Radius */
-  --r-sm: 0.5rem;
-  --r-md: 0.75rem;
-  --r-lg: 1.1rem;
-  --r-xl: 1.5rem;
-
-  /* Motion */
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* =====================================================
-   GLOBAL RESET
-   ===================================================== */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
+/* =========================================================
+   Global Reset & Box Model
+   ========================================================= */
 html,
 body,
 #root {
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
   margin: 0;
-  background: var(--bg-root);
-  color: var(--text-primary);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter",
-    "Segoe UI", Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
+  padding: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+/* =========================================================
+   Base Theme (Dark-first)
+   ========================================================= */
+:root {
+  /* typography */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
+    "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* color system */
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.92);
+  background-color: #030712;
+
+  /* rendering */
+  font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #030712;
+  color: inherit;
+}
+
+/* =========================================================
+   Base Elements
+   ========================================================= */
+a {
+  font-weight: 500;
+  color: #5eead4;
+  text-decoration: none;
+}
+a:hover {
+  color: #34d399;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
+}
+
+/* =========================================================
+   Scrollbars (subtle, dark)
+   ========================================================= */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* =========================================================
+   Utility Safety Helpers
+   ========================================================= */
+main,
+.app-root {
+  max-width: 100%;
   overflow-x: hidden;
 }
 
-/* =====================================================
-   TEXT & SELECTION
-   ===================================================== */
-::selection {
-  background: var(--accent-soft);
-  color: #ecfdf5;
-}
-
-p {
-  line-height: 1.65;
-  color: var(--text-secondary);
-}
-
-/* =====================================================
-   ACCESSIBILITY & INPUT SAFETY
-   ===================================================== */
-button,
-input,
-textarea {
-  font-family: inherit;
-  -webkit-tap-highlight-color: transparent;
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* =====================================================
-   SURFACE & GLASS PRIMITIVES
-   ===================================================== */
-.surface {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--r-lg);
-}
-
-.panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--r-xl);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
-}
-
-/* =====================================================
-   BUTTON SYSTEM (REAL UX)
-   ===================================================== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-
-  padding: 0.55rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-
-  border-radius: var(--r-md);
-  border: 1px solid transparent;
-
-  transition: background 0.2s var(--ease),
-              border 0.2s var(--ease),
-              transform 0.15s ease;
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: #022c22;
-}
-
-.btn-primary:hover {
-  background: #34d399;
-}
-
-.btn-outline {
-  background: transparent;
-  border-color: var(--border-muted);
-  color: var(--text-secondary);
-}
-
-.btn-outline:hover {
-  background: var(--bg-soft);
-  color: white;
-}
-
-.btn-danger {
-  background: rgba(244, 63, 94, 0.15);
-  color: var(--danger);
-  border-color: rgba(244, 63, 94, 0.35);
-}
-
-.btn:active {
-  transform: scale(0.96);
-}
-
-.btn:disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-/* =====================================================
-   INPUT & SEARCH (CLEAN)
-   ===================================================== */
-.input {
-  width: 100%;
-  padding: 0.7rem 0.9rem;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--r-md);
-  color: white;
-  font-size: 0.875rem;
-}
-
-.input::placeholder {
-  color: var(--text-muted);
-}
-
-.input:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
-/* Search */
-.search-shell {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-
-  padding: 0.75rem 1rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--r-xl);
-
-  transition: border 0.25s ease;
-}
-
-.search-shell:focus-within {
-  border-color: var(--accent);
-}
-
-.search-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: white;
-  font-size: 0.9rem;
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-/* =====================================================
-   MODALS & OVERLAYS
-   ===================================================== */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(10px);
-  z-index: 100;
-}
-
-.modal {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-active);
-  border-radius: var(--r-xl);
-  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.7);
-}
-
-/* =====================================================
-   SCROLLBAR (QUIET)
-   ===================================================== */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
-}
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
-}
-
-/* =====================================================
-   ANIMATIONS (MINIMAL & PURPOSEFUL)
-   ===================================================== */
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade {
-  animation: fade-in 0.25s ease-out both;
-}
-
-.animate-slide {
-  animation: slide-up 0.35s var(--ease) both;
-}
-
-/* =====================================================
-   MEDIA & REDUCED MOTION
-   ===================================================== */
-img,
-video {
-  max-width: 100%;
-  display: block;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
-    transition: none !important;
-  }
+/* Optional safe-area helper (mobile notches)
+   usage: class="safe-bottom"
+*/
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
