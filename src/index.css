@@ -3,108 +3,231 @@
 @tailwind utilities;
 
 /* =========================================================
-   Global Reset & Box Model
+   DESIGN TOKENS (Single Source of Truth)
    ========================================================= */
+:root {
+  color-scheme: dark;
+
+  /* Core Colors */
+  --bg-main: #020617;
+  --bg-panel: rgba(15, 23, 42, 0.7);
+  --bg-glass: rgba(255, 255, 255, 0.06);
+
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+
+  --text-main: #e5e7eb;
+  --text-muted: #94a3b8;
+
+  --accent: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.35);
+
+  --danger: #f43f5e;
+  --warning: #f59e0b;
+
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  --blur-lg: blur(20px);
+  --blur-xl: blur(30px);
+}
+
+/* =========================================================
+   GLOBAL RESET
+   ========================================================= */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body,
 #root {
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
-  box-sizing: border-box;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: inherit;
-}
-
-/* =========================================================
-   Base Theme (Dark-first)
-   ========================================================= */
-:root {
-  /* typography */
-  font-family: system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
-    "Helvetica Neue", sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  /* color system */
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.92);
-  background-color: #030712;
-
-  /* rendering */
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter",
+    "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: #030712;
-  color: inherit;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 /* =========================================================
-   Base Elements
+   SELECTION & FOCUS
    ========================================================= */
-a {
-  font-weight: 500;
-  color: #5eead4;
-  text-decoration: none;
-}
-a:hover {
-  color: #34d399;
+::selection {
+  background: rgba(16, 185, 129, 0.35);
+  color: #ecfdf5;
 }
 
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
-
-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35);
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* =========================================================
-   Scrollbars (subtle, dark)
+   CINEMATIC BACKGROUND EFFECTS
+   ========================================================= */
+
+/* Film Grain */
+.bg-noise {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Ambient Gradient Orbs */
+.bg-ambient::before,
+.bg-ambient::after {
+  content: "";
+  position: fixed;
+  width: 40rem;
+  height: 40rem;
+  border-radius: 50%;
+  filter: blur(140px);
+  opacity: 0.25;
+  z-index: -1;
+}
+
+.bg-ambient::before {
+  top: -10%;
+  left: -10%;
+  background: rgba(16, 185, 129, 0.35);
+}
+
+.bg-ambient::after {
+  bottom: -10%;
+  right: -10%;
+  background: rgba(59, 130, 246, 0.35);
+}
+
+/* =========================================================
+   GLASS / CARD PRIMITIVES
+   ========================================================= */
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: var(--blur-lg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.glass-strong {
+  background: var(--bg-panel);
+  backdrop-filter: var(--blur-xl);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+}
+
+/* =========================================================
+   SCROLLBAR (Slim & Elegant)
    ========================================================= */
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  transition: background 0.2s ease;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(16, 185, 129, 0.55);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 /* =========================================================
-   Utility Safety Helpers
+   ANIMATIONS (Used across Viewer/Admin)
    ========================================================= */
-main,
-.app-root {
-  max-width: 100%;
-  overflow-x: hidden;
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* Optional safe-area helper (mobile notches)
-   usage: class="safe-bottom"
-*/
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes glow-pulse {
+  0% {
+    box-shadow: 0 0 0 var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 25px var(--accent-glow);
+  }
+  100% {
+    box-shadow: 0 0 0 var(--accent-glow);
+  }
+}
+
+/* Utility Classes */
+.animate-fade-up {
+  animation: fade-up 0.45s ease-out both;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.35s ease-out both;
+}
+
+.animate-glow {
+  animation: glow-pulse 2.5s infinite;
+}
+
+/* =========================================================
+   BUTTON FEEDBACK
+   ========================================================= */
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+/* =========================================================
+   MEDIA OPTIMIZATION
+   ========================================================= */
+img,
+video {
+  max-width: 100%;
+  display: block;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
